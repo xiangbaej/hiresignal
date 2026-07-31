@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { categorize, type StackCategory } from '../lib/signals/stack.js';
+import { roleKey, splitTitleRegion } from '../lib/title-variant.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DATA_DIR = path.join(ROOT, 'data');
@@ -141,98 +142,9 @@ interface RoleEntry {
   seats: RoleSeat[];
 }
 
-/**
- * 지역 표현 어휘.
- *
- * 실측 데이터에 나타난 지역 접미사 + 흔한 지리 표현으로만 구성한다. 목록에 없는
- * 접미사는 지역으로 보지 않으므로 묶이지 않는다.
- */
-const REGION_WORDS = new Set([
-  // 광역
-  'americas', 'america', 'emea', 'apac', 'latam', 'anz', 'global', 'worldwide',
-  'na', 'eu', 'europe', 'european', 'union', 'international',
-  'north', 'south', 'east', 'west', 'central', 'nordics', 'benelux', 'dach',
-  // 국가
-  'us', 'usa', 'uk', 'ireland', 'germany', 'france', 'spain', 'portugal', 'poland',
-  'romania', 'netherlands', 'sweden', 'norway', 'denmark', 'finland', 'switzerland',
-  'italy', 'austria', 'belgium', 'czechia', 'bulgaria', 'hungary', 'greece', 'turkey',
-  'israel', 'canada', 'mexico', 'brazil', 'argentina', 'chile', 'colombia', 'india',
-  'japan', 'korea', 'singapore', 'australia', 'zealand', 'china', 'taiwan', 'philippines',
-  'indonesia', 'vietnam', 'thailand', 'malaysia', 'uae', 'egypt', 'nigeria', 'africa',
-  // 도시 (실측 등장분)
-  'bucharest', 'cluj', 'iasi', 'london', 'berlin', 'paris', 'madrid', 'lisbon',
-  'warsaw', 'dublin', 'amsterdam', 'stockholm', 'munich', 'zurich', 'tokyo',
-  'bangalore', 'bengaluru', 'sydney', 'melbourne', 'toronto', 'vancouver',
-  'francisco', 'seattle', 'austin', 'boston', 'chicago', 'denver', 'atlanta', 'nyc',
-  // 근무 형태 수식어
-  'remote', 'onsite', 'hybrid', 'based', 'only', 'region', 'timezone', 'timezones',
-]);
-
-/**
- * 접미사가 지역 표현인지 판정한다. 모든 낱말이 어휘에 있어야 참이다.
- *
- * 한 낱말이라도 벗어나면 거짓으로 두는 이유: 오판의 비용이 비대칭이다. 지역을
- * 놓치면 접히지 않은 채 보이고(현행 동작), 잘못 접으면 다른 직무가 하나로
- * 합쳐져 정보가 사라진다.
- */
-function isRegionLabel(raw: string): boolean {
-  const words = raw
-    .toLowerCase()
-    .split(/[\s/&,+()]+/)
-    .map((w) => w.replace(/[.]/g, ''))
-    .filter(Boolean);
-  if (words.length === 0 || words.length > 4) return false;
-  return words.every((w) => REGION_WORDS.has(w));
-}
-
-/**
- * 제목을 "본문 + 지역"으로 분해한다.
- *
- * 접미사를 무조건 떼면 안 된다. 실측 예시로 scaleway 의
- * `Software Engineer - Compute Marketplace` 와 `- Kubernetes Specialist` 는
- * 완전히 다른 자리인데, 형태만 보면 ashby 의
- * `Staff Design Engineer - Americas / Canada / EU`(같은 자리의 지역 변형)와
- * 구분되지 않는다. 유일한 구분 기준이 "접미사가 지리 표현인가"라서 어휘 판정을 쓴다.
- */
-function splitRegion(title: string): { base: string; region: string | null } {
-  const trimmed = title.trim();
-
-  // 1) 끝 괄호 형태: "... (Korea)", "... (UK/Europe)"
-  const paren = /^(.+?)\s*\(([^()]+)\)\s*$/.exec(trimmed);
-  if (paren) {
-    const [, head = '', suffix = ''] = paren;
-    if (head && isRegionLabel(suffix)) {
-      return { base: head.trim(), region: suffix.trim() };
-    }
-  }
-
-  // 2) 끝 대시 구절: "... - Americas", "... — EU"
-  const dash = /^(.+?)\s*[-\u2010-\u2015]\s*([^-\u2010-\u2015]+)$/.exec(trimmed);
-  if (dash) {
-    const [, head = '', suffix = ''] = dash;
-    if (head && isRegionLabel(suffix)) {
-      return { base: head.trim(), region: suffix.trim() };
-    }
-  }
-
-  return { base: trimmed, region: null };
-}
-
-/**
- * 직무 묶음 키. 대소문자·공백·구두점 변형만 흡수한다.
- *
- * 낱말을 지우지는 않는다. 여기서 더 공격적으로 정규화하면 서로 다른 직무가
- * 합쳐진다 — perplexity 의 `Member of Technical Staff (...)` 15건이 그 예로,
- * 괄호 안이 전부 다른 직무다.
- */
-function roleKey(base: string): string {
-  return base
-    .toLowerCase()
-    .replace(/[\u2010-\u2015]/g, '-')
-    .replace(/[(),.]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// 제목 변형 판정(지역 어휘·정규화)은 src/lib/title-variant.ts 에 있다.
+// 감사 스크립트(roles:audit)가 같은 로직을 써야 하는데 이 파일은 import 시점에
+// main() 이 돌아 리포트를 써버리므로 재사용할 수 없다.
 
 /** 리드를 회사 단위로 묶는다. 보드가 다르면 다른 회사로 취급한다. */
 function groupByCompany(leads: Lead[]): CompanyGroup[] {
@@ -274,7 +186,7 @@ function groupByCompany(leads: Lead[]): CompanyGroup[] {
     }
 
     // 같은 직무의 자리를 하나로 접는다. 지역만 다른 변형도 같은 직무로 본다.
-    const { base, region } = splitRegion(lead.title);
+    const { base, region } = splitTitleRegion(lead.title);
     const roleMap = roleMaps.get(key)!;
     const rk = roleKey(base);
     let entry = roleMap.get(rk);

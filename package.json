@@ -10,6 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "ledger:check": "tsx src/scripts/check-ledger.ts",
+    "roles:audit": "tsx src/scripts/audit-role-merge.ts",
     "connectors:try": "tsx src/scripts/try-connectors.ts",
     "boards:discover": "tsx src/scripts/discover-boards.ts",
     "enrich": "tsx src/pipeline/enrich-archive.ts",

@@ -56,7 +56,15 @@ npm run boards:discover      # ATS 보드 발굴 (--write 로 시드 반영)
 npm run enrich               # Wayback 아카이브 보강
 npm run scan -- --report --export
 npm run report:html          # data/report.html + docs/index.html
+
+npm run ledger:check         # 커밋 전 필수 — 관측 원장이 줄지 않았는지 확인
+npm run roles:audit          # 직무 병합이 무엇을 놓쳤는지 감사
 ```
+
+> **`data/`를 커밋하기 전에 `npm run ledger:check`를 돌리세요.** 원장은 append-only이므로
+> 줄이 사라지면 그 관측은 되돌릴 수 없습니다. 2026-07-31에 봇이 커밋한 관측 5,558줄을
+> 스테일한 작업트리가 덮어써서 유실된 사고가 있었고, 이 검사가 그 패턴을 잡습니다.
+> [일일 워크플로우](.github/workflows/daily-scan.yml)의 커밋 스텝 직전에도 걸려 있습니다.
 
 비밀값이 필요하지 않습니다. 4개 ATS와 Wayback CDX 모두 인증 없는 공개 엔드포인트입니다. `.env`는 성능 튜닝 값만 담습니다([예시](.env.example)).
 
@@ -86,15 +94,33 @@ npm run report:html          # data/report.html + docs/index.html
 ## 구조
 
 ```
-src/lib/ats/         4개 ATS 커넥터 + HTTP(재시도/백오프/동시성) + 정규화
-src/lib/signals/     score / stack / evergreen / role
-src/lib/store/       file-store(원자적 쓰기 + append-only 원장) / archive-cache
-src/lib/blocklist.ts opt-out 강제
-src/pipeline/        scan / enrich-archive / report-html
-src/scripts/         boards:discover / 커넥터 검증 / 아카이브 증거 감사
-docs/index.html      공개 티저 (GitHub Pages, main /docs 브랜치 모드)
-seeds/               companies(검증된 보드) / candidates(추측) / blocklist
-data/                관측 스냅샷 · 아카이브 캐시 · 리드 산출물
+src/lib/ats/            4개 ATS 커넥터 + HTTP(재시도/백오프/동시성) + 정규화
+src/lib/signals/        score / stack / evergreen / role
+src/lib/store/          file-store(원자적 쓰기 + append-only 원장) / archive-cache
+src/lib/blocklist.ts    opt-out 강제
+src/lib/title-variant.ts 같은 직무의 중복 공고·지역 변형 판정
+src/pipeline/           scan / enrich-archive / report-html
+src/scripts/            boards:discover / 커넥터 검증 / 아카이브 증거 감사
+                        / 원장 회귀 검사 / 직무 병합 감사
+docs/index.html         공개 티저 (GitHub Pages, main /docs 브랜치 모드)
+seeds/                  companies(검증된 보드) / candidates(추측) / blocklist
+data/                   관측 스냅샷 · 아카이브 캐시 · 리드 산출물
 ```
+
+### 같은 직무의 중복 공고
+
+회사는 한 자리를 여러 건으로 올립니다. cresta의 `Infrastructure Engineer/SRE`는 305일·157일·157일
+세 건이 따로 올라와 있습니다. 이걸 세 줄로 나열하면 "직무가 세 개"로 읽히지만 실제로는
+**한 직무에 자리가 세 개**이고, 이 구분이 제안 논지를 바꿉니다 — "여러 분야를 못 뽑는다"보다
+"이 한 자리를 세 번 시도하고도 못 뽑았다"가 더 강한 근거입니다. 그래서 리포트는 `×3` 배지로
+접고 개별 공고 링크는 전부 남깁니다.
+
+지역만 다른 변형(`Staff Design Engineer - Americas / Canada / EU`)도 같은 직무로 묶되,
+**접미사가 알려진 지역 표현일 때만** 묶습니다. 접미사를 무조건 떼면 서로 다른 직무가 합쳐지기
+때문입니다 — scaleway의 `Software Engineer - Compute Marketplace`와 `- Kubernetes Specialist`는
+형태가 같지만 다른 자리입니다. 잘못 접히면 자리 하나가 화면에서 사라지고, 그건 놓친 병합보다
+비쌉니다. 어휘는 추측으로 늘리지 않고 [`npm run roles:audit`](src/scripts/audit-role-merge.ts)이
+뽑는 미인식 접미사 빈도를 근거로만 넓힙니다. 실측 상위는 `engineer / ai / data / infrastructure`
+처럼 전문분야어이고, 그게 정상입니다.
 
 저장소는 인터페이스로 분리되어 있어 규모가 커지면 Postgres로 이관할 수 있습니다. 현재 파일 기반인 이유는 관측 시계를 하루라도 빨리 시작하기 위해서였습니다 — 60일 신호는 시작일이 늦어지면 그만큼 늦게 성숙합니다.
