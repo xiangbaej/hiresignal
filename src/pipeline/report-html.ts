@@ -377,6 +377,7 @@ const DESIGN_TOKENS = `
     /* 경계선·칩·호버. 하드코딩된 hex 를 토큰으로 뺀 이유는 다크 모드에서
        이 값들만 갈아끼우면 되게 하려는 것이다. */
     --line: #eef1f4;
+    --line-strong: #e9ecef;
     --hover: #e8ebee;
     --chip-bg: #fafbfc;
     --chip-line: #e3e7ec;
@@ -459,6 +460,46 @@ const DESIGN_TOKENS = `
   .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
   .card-top .grade { margin-left: auto; }
   .why summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  /*
+   * 다크 모드. 토큰만 갈아끼우므로 두 화면(내부 리포트 · 공개 랜딩)이 함께 따라온다.
+   *
+   * 두 화면 모두 색을 직접 지정한 선언이 거의 없어서 이 방식이 성립한다. 공개
+   * 페이지에 남아 있던 두 건(#e9ecef 구획선, .cta 흰 글자)도 토큰으로 바꿨다.
+   * 앞으로 색을 하드코딩하면 다크에서 조용히 깨지므로 항상 토큰을 쓴다.
+   *
+   * 그림자를 어둡게 유지하면 어두운 배경에서 보이지 않으므로, 카드 구획을 그림자
+   * 대신 미세한 테두리로 잡는다.
+   */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --card: #1e2127;
+      --fg: #e8eaed;
+      --fg2: #b0b6bf;
+      --muted: #858c96;
+      --primary: #62a2ff;
+      --primary-dark: #8bbaff;
+      --primary-weak: #1b2b42;
+      --primary-weak2: #24395a;
+      --hot: #ff6b78;
+      --hot-weak: #3a1f24;
+      --warn-weak: #3a2f1c;
+      --warn-fg: #f0b45c;
+      --line: #2b2f37;
+      --line-strong: #2b2f37;
+      --hover: #2b2f37;
+      --chip-bg: #24272e;
+      --chip-line: #333842;
+      --dup-bg: #3a1f24;
+      --dup-fg: #ff8f99;
+      /* 솔리드 배경이 전부 밝아지므로 그 위 글자는 어두워야 한다. */
+      --on-fg: #16181d;
+      --on-primary: #0f1a2b;
+      --on-hot: #2a1013;
+      --shadow: 0 0 0 1px rgba(255, 255, 255, .05);
+    }
+  }
 `;
 
 /* ================================================================== *
@@ -703,8 +744,10 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
 <article class="group-card" data-groups="${esc([...g.tabGroups].join(' '))}"
          data-search="${esc(g.searchBlob)}" data-count="${g.count}"
          data-seats="${g.count}" data-rolecount="${g.roleCount}"
+         data-hot="${g.hotCount}"
          data-age="${esc(g.maxAge ?? 0)}" data-rel="${g.topRel}"
          data-company="${esc(g.company)}"
+         data-key="${esc(g.board || g.company)}"
          data-roles="${esc(JSON.stringify(draftRoles))}"
          data-tags="${esc(g.tags.slice(0, 4).join(', '))}">
   <div class="card-top">
@@ -734,6 +777,9 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
   }
 
   <div class="card-cta">
+    <button type="button" class="btn-mark" data-mark aria-pressed="false">
+      <span aria-hidden="true">&#9633;</span> 연락함
+    </button>
     <button type="button" class="btn-primary" data-gdraft="${index}">
       콜드메일 초안 <span aria-hidden="true">&rarr;</span>
     </button>
@@ -759,6 +805,7 @@ function renderCard(lead: Lead, index: number): string {
 <article class="card" data-group="${esc(group)}" data-grade="${esc(lead.grade)}"
          data-search="${esc(`${lead.company} ${lead.title} ${lead.tags.join(' ')}`.toLowerCase())}"
          data-company="${esc(lead.company)}" data-title="${esc(lead.title)}"
+         data-key="${esc(lead.board || lead.company)}"
          data-age="${esc(lead.ageDays ?? 0)}" data-rel="${lead.rel}"
          data-tags="${esc(lead.tags.slice(0, 4).join(', '))}"
          data-url="${safeUrl(lead.jobUrl)}">
@@ -784,9 +831,32 @@ function renderCard(lead: Lead, index: number): string {
  * 내부 리포트 (data/report.html)
  * ================================================================== */
 
+/**
+ * 키보드 단축키 목록.
+ *
+ * 화면에 표시하는 목록과 실제 배선을 한곳에서 만든다. 두 곳에 적으면 배선을 바꿀
+ * 때 도움말이 조용히 거짓말을 하게 된다.
+ */
+const SHORTCUTS: ReadonlyArray<readonly [string, string]> = [
+  ['/', '검색으로 이동'],
+  ['Esc', '검색어 지우기 · 도움말 닫기'],
+  ['1‒9', '직군 탭 선택'],
+  ['0', '전체 탭'],
+  ['v', '회사별 / 공고별 전환'],
+  ['h', 'Hot만 보기'],
+  ['u', '미연락만 보기'],
+  ['s', '정렬 순환'],
+  ['?', '이 도움말'],
+];
+
 function renderHtml(data: LeadsFile): string {
   const s = data.summary;
   const generated = new Date(data.generatedAt);
+
+  const SHORTCUT_ROWS = SHORTCUTS.map(
+    ([key, desc]) =>
+      `<div class="help-row"><kbd>${esc(key)}</kbd><span>${esc(desc)}</span></div>`,
+  ).join('');
 
   // 탭별 개수를 미리 계산한다. 개수가 0 인 탭은 렌더링하지 않는다 —
   // 눌러도 빈 화면이 나오는 탭은 사용자를 헛걸음시킨다.
@@ -973,7 +1043,37 @@ ${DESIGN_TOKENS}
 
   /* 필터 결과 개수. 시각적으로는 작고 옅지만 aria-live 로 스크린리더에도 전달된다.
      필터를 눌렀는데 아무 피드백이 없으면 동작했는지 알 수 없다. */
-  .result-count { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; }
+  .result-count { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .count-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin: 14px 0 0; flex-wrap: wrap;
+  }
+
+  /* 단축키 도움말. 단축키는 발견되지 않으면 없는 기능이므로 입구를 화면에 둔다. */
+  .help-btn {
+    border: 0; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700;
+    color: var(--fg2); background: transparent; padding: 4px 2px;
+  }
+  .help-btn:hover { color: var(--primary); }
+  .help-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  kbd {
+    font: inherit; font-size: 11.5px; font-weight: 700; color: var(--fg2);
+    background: var(--chip-bg); border: 1px solid var(--chip-line);
+    border-radius: 6px; padding: 1px 6px; margin-left: 2px;
+  }
+  .help {
+    margin-top: 10px; background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px 20px;
+  }
+  .help-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 8px 20px;
+  }
+  .help-row {
+    display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: var(--fg2);
+  }
+  .help-row kbd { flex: 0 0 auto; margin-left: 0; min-width: 30px; text-align: center; }
+  .help-note { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; max-width: 74ch; }
 
   /*
    * 반응형 그리드. auto-fill + minmax 로 폭에 따라 열 수가 정해진다.
@@ -992,8 +1092,31 @@ ${DESIGN_TOKENS}
      쪽을 택한다. */
   .feed .is-drafting { grid-column: 1 / -1; }
 
-  /* CTA: 카드 우측 하단 단일 메인 버튼 */
-  .card-cta { display: flex; justify-content: flex-end; margin-top: 16px; }
+  /* CTA: 카드 우측 하단 */
+  .card-cta {
+    display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+    margin-top: 16px; flex-wrap: wrap;
+  }
+
+  /* 연락 표시.
+     이 리포트의 최종 목적은 콜드메일인데 "이미 보낸 회사"를 알 방법이 없어
+     같은 곳에 두 번 연락하게 된다. 서버가 없으므로 localStorage 에 담는다 —
+     기기 간 동기화는 안 되지만 1인 운영에서는 이게 필요의 전부다. */
+  .btn-mark {
+    margin-right: auto; border: 1px solid var(--chip-line); cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 700; color: var(--fg2);
+    background: var(--chip-bg); border-radius: 10px; padding: 9px 13px;
+    white-space: nowrap;
+  }
+  .btn-mark:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-mark:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .btn-mark[aria-pressed="true"] {
+    background: var(--primary-weak); border-color: transparent; color: var(--primary);
+  }
+  /* 연락한 회사는 옅게 내린다. 목록에서 지우지는 않는다 — 무엇을 이미 했는지도
+     정보이고, 되돌리려면 카드가 보여야 한다. */
+  .is-contacted { opacity: .55; }
+  .is-contacted:hover, .is-contacted:focus-within { opacity: 1; }
   .btn-primary {
     border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700;
     color: var(--on-primary); background: var(--primary); border-radius: 12px;
@@ -1131,43 +1254,10 @@ ${DESIGN_TOKENS}
     .role-age { flex-basis: 62px; }
   }
 
-  /*
-   * 다크 모드. 토큰만 갈아끼운다.
-   *
-   * 이 리포트는 운영자가 매일 보는 화면이고, 밝은 배경 고정은 야간 작업에서
-   * 눈이 부신다. 공개 랜딩(docs/index.html)에는 적용하지 않는다 — 그쪽은
-   * 마케팅 페이지로 색을 직접 지정한 구획이 많아 토큰 교체만으로는 깨진다.
-   *
-   * 그림자를 어둡게 유지하면 어두운 배경에서 보이지 않으므로, 카드 구획을
-   * 그림자 대신 미세한 테두리로 잡는다.
-   */
+  /* 다크 토큰은 DESIGN_TOKENS 에 있어 두 화면이 함께 따라온다.
+     여기에는 이 화면에만 필요한 보정만 둔다 — 어두운 배경에서 입력·탭의 경계가
+     사라지므로 테두리 역할의 그림자를 되돌려준다. */
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16181d;
-      --card: #1e2127;
-      --fg: #e8eaed;
-      --fg2: #b0b6bf;
-      --muted: #858c96;
-      --primary: #62a2ff;
-      --primary-dark: #8bbaff;
-      --primary-weak: #1b2b42;
-      --primary-weak2: #24395a;
-      --hot: #ff6b78;
-      --hot-weak: #3a1f24;
-      --warn-weak: #3a2f1c;
-      --warn-fg: #f0b45c;
-      --line: #2b2f37;
-      --hover: #2b2f37;
-      --chip-bg: #24272e;
-      --chip-line: #333842;
-      --dup-bg: #3a1f24;
-      --dup-fg: #ff8f99;
-      /* 솔리드 배경이 전부 밝아지므로 그 위 글자는 어두워야 한다. */
-      --on-fg: #16181d;
-      --on-primary: #0f1a2b;
-      --on-hot: #2a1013;
-      --shadow: 0 0 0 1px rgba(255, 255, 255, .05);
-    }
     .search input, .sort select, .tab { box-shadow: var(--shadow); }
   }
 </style>
@@ -1208,6 +1298,12 @@ ${DESIGN_TOKENS}
         <button type="button" class="seg-btn" data-view="company" aria-pressed="true">회사별</button>
         <button type="button" class="seg-btn" data-view="lead" aria-pressed="false">공고별</button>
       </div>
+      <div class="seg" role="group" aria-label="추가 필터">
+        <button type="button" class="seg-btn" id="only-hot" aria-pressed="false"
+                title="Hot 등급만 (단축키 h)">Hot만</button>
+        <button type="button" class="seg-btn" id="only-todo" aria-pressed="false"
+                title="연락하지 않은 회사만 (단축키 u)">미연락만</button>
+      </div>
       <label class="sort">
         <span class="sr-only">정렬</span>
         <select id="sort" aria-label="정렬 기준">
@@ -1220,7 +1316,20 @@ ${DESIGN_TOKENS}
     </div>
   </div>
 
-  <p class="result-count" id="count" role="status" aria-live="polite"></p>
+  <div class="count-row">
+    <p class="result-count" id="count" role="status" aria-live="polite"></p>
+    <button type="button" class="help-btn" id="help-btn" aria-expanded="false" aria-controls="help">
+      단축키 <kbd>?</kbd>
+    </button>
+  </div>
+
+  <div class="help" id="help" hidden>
+    <div class="help-grid">${SHORTCUT_ROWS}</div>
+    <p class="help-note">
+      필터 상태는 주소에 저장됩니다 &mdash; 새로고침해도 유지되고, 그 주소를 그대로
+      북마크하거나 공유할 수 있습니다. 연락 표시는 이 브라우저에만 저장됩니다.
+    </p>
+  </div>
 
   <div class="feed" id="groups">${groupCards}</div>
   <div class="feed" id="feed" hidden>${cards}</div>
@@ -1277,8 +1386,41 @@ ${DESIGN_TOKENS}
   var empty = document.getElementById('empty');
   var count = document.getElementById('count');
 
+  var onlyHot = document.getElementById('only-hot');
+  var onlyTodo = document.getElementById('only-todo');
+  var help = document.getElementById('help');
+  var helpBtn = document.getElementById('help-btn');
+
   var activeTab = 'all';
   var view = 'company';
+
+  /* ── 연락 이력 ──
+     서버가 없으므로 localStorage 에 담는다. file:// 에서는 오리진이 불투명해
+     접근 자체가 막히는 브라우저가 있으므로 모든 접근을 try 로 감싼다 —
+     저장이 안 되더라도 리포트의 나머지 기능은 살아 있어야 한다. */
+  var STORE_KEY = 'hiresignal.contacted.v1';
+  var contacted = {};
+  try {
+    contacted = JSON.parse(localStorage.getItem(STORE_KEY) || '{}') || {};
+  } catch (err) { contacted = {}; }
+
+  function saveContacted() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(contacted)); } catch (err) {}
+  }
+
+  function paintContacted(card) {
+    var key = card.getAttribute('data-key');
+    var on = !!contacted[key];
+    var btn = card.querySelector('[data-mark]');
+    card.classList.toggle('is-contacted', on);
+    if (btn) {
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.innerHTML = on
+        ? '<span aria-hidden="true">&#9745;</span> 연락함'
+        : '<span aria-hidden="true">&#9633;</span> 연락함';
+    }
+  }
+  groupCards.forEach(paintContacted);
 
   function matchesTab(el) {
     if (activeTab === 'all') return true;
@@ -1287,20 +1429,40 @@ ${DESIGN_TOKENS}
     return (el.getAttribute('data-groups') || '').split(' ').indexOf(activeTab) !== -1;
   }
 
+  function matchesHot(el) {
+    if (onlyHot.getAttribute('aria-pressed') !== 'true') return true;
+    return view === 'lead'
+      ? el.getAttribute('data-grade') === 'hot'
+      : Number(el.getAttribute('data-hot') || 0) > 0;
+  }
+
+  function matchesTodo(el) {
+    if (onlyTodo.getAttribute('aria-pressed') !== 'true') return true;
+    /* 연락 표시는 회사 단위로만 남긴다. 공고별 보기에서는 소속 회사 기준으로 본다. */
+    var key = el.getAttribute('data-key');
+    return !contacted[key];
+  }
+
   function apply() {
     var term = q.value.trim().toLowerCase();
     var list = view === 'lead' ? leadCards : groupCards;
     var shown = 0;
     list.forEach(function (el) {
-      var visible = matchesTab(el) &&
+      var visible = matchesTab(el) && matchesHot(el) && matchesTodo(el) &&
         (term === '' || (el.getAttribute('data-search') || '').indexOf(term) !== -1);
       el.hidden = !visible;
       if (visible) shown++;
     });
     empty.hidden = shown !== 0;
-    count.textContent = view === 'lead'
-      ? shown + '개 공고 (전체 ' + leadCards.length + ')'
-      : shown + '개 회사 (전체 ' + groupCards.length + ')';
+
+    var totalN = view === 'lead' ? leadCards.length : groupCards.length;
+    var unit = view === 'lead' ? '개 공고' : '개 회사';
+    var marked = 0;
+    for (var k in contacted) if (contacted[k]) marked++;
+    count.textContent = shown + unit + ' (전체 ' + totalN + ')' +
+      (marked > 0 ? ' · 연락함 ' + marked + '곳' : '');
+
+    writeHash();
   }
 
   function num(el, attr) { return Number(el.getAttribute(attr) || 0); }
@@ -1347,19 +1509,94 @@ ${DESIGN_TOKENS}
     apply();
   }
 
+  /* ── 필터 상태를 URL 에 담는다 ──
+     새로고침하면 탭·검색·정렬이 초기화되던 문제를 없애고, 특정 조합을 북마크하거나
+     남에게 보낼 수 있게 한다. pushState 대신 replaceState 를 쓴다 — 필터 조작마다
+     히스토리가 쌓이면 뒤로가기가 필터 되돌리기가 되어 페이지를 벗어날 수 없다. */
+  var writingHash = false;
+
+  function writeHash() {
+    var p = [];
+    if (view !== 'company') p.push('view=' + view);
+    if (activeTab !== 'all') p.push('tab=' + activeTab);
+    if (sortSel.value !== 'default') p.push('sort=' + sortSel.value);
+    if (q.value.trim()) p.push('q=' + encodeURIComponent(q.value.trim()));
+    if (onlyHot.getAttribute('aria-pressed') === 'true') p.push('hot=1');
+    if (onlyTodo.getAttribute('aria-pressed') === 'true') p.push('todo=1');
+    var next = p.length ? '#' + p.join('&') : '';
+    if (next === (location.hash || '')) return;
+    writingHash = true;
+    try {
+      history.replaceState(null, '', location.pathname + location.search + next);
+    } catch (err) {
+      /* file:// 에서 replaceState 가 막히는 브라우저가 있다. 상태 저장은 부가
+         기능이므로 실패해도 화면은 그대로 동작해야 한다. */
+    }
+    writingHash = false;
+  }
+
+  function readHash() {
+    var raw = (location.hash || '').replace(/^#/, '');
+    if (!raw) return null;
+    var out = {};
+    raw.split('&').forEach(function (pair) {
+      var eq = pair.indexOf('=');
+      if (eq === -1) return;
+      out[pair.slice(0, eq)] = decodeURIComponent(pair.slice(eq + 1));
+    });
+    return out;
+  }
+
+  function setPressed(btn, on) {
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  function selectTab(key) {
+    var found = false;
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('data-tab') === key;
+      if (on) found = true;
+      setPressed(t, on);
+    });
+    if (found) activeTab = key;
+    return found;
+  }
+
   tabs.forEach(function (tab) {
     tab.addEventListener('click', function () {
-      activeTab = tab.getAttribute('data-tab');
-      tabs.forEach(function (t) {
-        t.setAttribute('aria-pressed', t === tab ? 'true' : 'false');
-      });
+      selectTab(tab.getAttribute('data-tab'));
       apply();
     });
   });
   segs.forEach(function (s) {
-    s.addEventListener('click', function () { setView(s.getAttribute('data-view')); });
+    var v = s.getAttribute('data-view');
+    if (!v) return; /* Hot만·미연락만 버튼은 아래에서 따로 배선한다 */
+    s.addEventListener('click', function () { setView(v); });
   });
-  sortSel.addEventListener('change', sortNow);
+
+  [onlyHot, onlyTodo].forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      setPressed(btn, btn.getAttribute('aria-pressed') !== 'true');
+      apply();
+    });
+  });
+
+  /* 연락 표시 토글 */
+  groupFeed.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-mark]');
+    if (!btn) return;
+    var card = btn.closest('article');
+    var key = card.getAttribute('data-key');
+    if (contacted[key]) delete contacted[key];
+    else contacted[key] = new Date().toISOString().slice(0, 10);
+    saveContacted();
+    paintContacted(card);
+    apply();
+  });
+  /* 정렬은 화면만 바꾸므로 apply() 를 부르지 않는다. 대신 상태 저장은 해야 한다 —
+     writeHash 를 빼먹으면 셀렉트로 바꾼 정렬만 새로고침에서 사라져, 단축키로
+     바꿀 때는 유지되는 비일관이 생긴다. */
+  sortSel.addEventListener('change', function () { sortNow(); writeHash(); });
 
   /* 검색은 디바운스한다.
      결과 개수가 aria-live 영역이라, 키를 누를 때마다 갱신하면 스크린리더가 글자
@@ -1390,7 +1627,83 @@ ${DESIGN_TOKENS}
       : btn.getAttribute('data-label-less');
   });
 
-  setView('company');
+  /* ── 키보드 단축키 ──
+     매일 여는 도구라 손이 마우스를 떠나지 않는 편이 빠르다. 입력 중에는 동작하지
+     않아야 하므로 포커스가 입력 요소에 있으면 전부 무시한다. */
+  function toggleHelp(force) {
+    if (!help) return;
+    var next = typeof force === 'boolean' ? force : help.hidden;
+    help.hidden = !next;
+    if (helpBtn) helpBtn.setAttribute('aria-expanded', next ? 'true' : 'false');
+  }
+  if (helpBtn) helpBtn.addEventListener('click', function () { toggleHelp(); });
+
+  function isTyping(el) {
+    if (!el) return false;
+    var tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    /* Esc 는 입력 중에도 받는다. 검색을 비우고 빠져나오는 용도다. */
+    if (e.key === 'Escape') {
+      if (help && !help.hidden) { toggleHelp(false); return; }
+      if (q.value) { q.value = ''; apply(); }
+      if (document.activeElement === q) q.blur();
+      return;
+    }
+
+    if (isTyping(document.activeElement)) return;
+
+    if (e.key === '/') { e.preventDefault(); q.focus(); q.select(); return; }
+    if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+    if (e.key === 'v') { setView(view === 'company' ? 'lead' : 'company'); return; }
+    if (e.key === 'h') { onlyHot.click(); return; }
+    if (e.key === 'u') { onlyTodo.click(); return; }
+    if (e.key === 's') {
+      /* 정렬을 순환한다. 공고별 보기에서 비활성인 항목은 건너뛴다. */
+      var opts = Array.prototype.slice.call(sortSel.options).filter(function (o) {
+        return !o.disabled;
+      });
+      var at = opts.indexOf(sortSel.options[sortSel.selectedIndex]);
+      sortSel.value = opts[(at + 1) % opts.length].value;
+      sortNow();
+      writeHash();
+      return;
+    }
+    if (/^[0-9]$/.test(e.key)) {
+      var idx = e.key === '0' ? 0 : Number(e.key);
+      if (tabs[idx]) { tabs[idx].click(); }
+      return;
+    }
+  });
+
+  /* ── 초기 상태 복원 ──
+     해시가 있으면 그대로 재현한다. setView 가 정렬과 필터를 함께 돌리므로
+     값만 미리 채워 두고 마지막에 한 번 적용한다. */
+  var initial = readHash();
+  if (initial) {
+    if (initial.tab) selectTab(initial.tab);
+    if (initial.sort) sortSel.value = initial.sort;
+    if (initial.q) q.value = initial.q;
+    setPressed(onlyHot, initial.hot === '1');
+    setPressed(onlyTodo, initial.todo === '1');
+  }
+  setView(initial && initial.view === 'lead' ? 'lead' : 'company');
+
+  /* 뒤로/앞으로로 해시가 바뀌면 상태를 따라간다. 우리가 쓴 해시는 무시한다. */
+  window.addEventListener('hashchange', function () {
+    if (writingHash) return;
+    var st = readHash() || {};
+    selectTab(st.tab || 'all');
+    sortSel.value = st.sort || 'default';
+    q.value = st.q || '';
+    setPressed(onlyHot, st.hot === '1');
+    setPressed(onlyTodo, st.todo === '1');
+    setView(st.view === 'lead' ? 'lead' : 'company');
+  });
 
   /* ── 콜드메일 초안 ──
      LLM 을 쓰지 않는다. 관측된 신호만으로 구성하므로 근거가 사실이고, API 키 없이
@@ -1650,7 +1963,7 @@ function renderPublicHtml(data: LeadsFile): string {
 ${DESIGN_TOKENS}
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
   .section { padding: 64px 0; }
-  .section + .section { border-top: 1px solid #e9ecef; }
+  .section + .section { border-top: 1px solid var(--line-strong); }
   h2 { font-size: 24px; font-weight: 800; letter-spacing: -.025em; margin: 0 0 8px; }
   .section-sub { font-size: 15px; color: var(--muted); margin: 0 0 28px; }
   p { color: var(--fg2); }
@@ -1671,7 +1984,7 @@ ${DESIGN_TOKENS}
     margin: 0 auto 32px; max-width: 34em;
   }
   .cta {
-    display: inline-block; background: var(--primary); color: #fff; text-decoration: none;
+    display: inline-block; background: var(--primary); color: var(--on-primary); text-decoration: none;
     font-weight: 700; font-size: 16px; padding: 16px 30px; border-radius: 14px;
     box-shadow: 0 6px 20px rgba(49, 130, 246, .28); transition: background .12s, transform .06s;
   }
@@ -1737,7 +2050,7 @@ ${DESIGN_TOKENS}
   .field input:focus { outline: 2px solid var(--primary); }
   .btn-submit {
     width: 100%; border: 0; cursor: pointer; font: inherit; font-size: 16px;
-    font-weight: 700; color: #fff; background: var(--primary); border-radius: 14px;
+    font-weight: 700; color: var(--on-primary); background: var(--primary); border-radius: 14px;
     padding: 16px; margin-top: 6px; transition: background .12s;
   }
   .btn-submit:hover { background: var(--primary-dark); }
@@ -1765,7 +2078,7 @@ ${DESIGN_TOKENS}
   }
   footer {
     padding: 36px 0 72px; color: var(--muted); font-size: 13px; line-height: 1.8;
-    border-top: 1px solid #e9ecef;
+    border-top: 1px solid var(--line-strong);
   }
 
   @media (max-width: 720px) {
