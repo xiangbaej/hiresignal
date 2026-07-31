@@ -368,16 +368,42 @@ const DESIGN_TOKENS = `
     --primary: #3182f6;
     --primary-dark: #1b64da;
     --primary-weak: #e8f3ff;
+    --primary-weak2: #d8ebff;
     --hot: #f04452;
     --hot-weak: #ffeceb;
     --warn: #ff9500;
     --warn-weak: #fff4e6;
     --warn-fg: #b26a00;
+    /* 경계선·칩·호버. 하드코딩된 hex 를 토큰으로 뺀 이유는 다크 모드에서
+       이 값들만 갈아끼우면 되게 하려는 것이다. */
+    --line: #eef1f4;
+    --hover: #e8ebee;
+    --chip-bg: #fafbfc;
+    --chip-line: #e3e7ec;
+    --dup-bg: #fdecea;
+    --dup-fg: #b3261e;
+    /* 솔리드 배경 위에 얹는 글자색.
+       흰색을 직접 쓰면 다크 모드에서 --fg / --primary / --hot 이 밝아질 때
+       밝은 배경에 흰 글자가 되어 읽히지 않는다. 배경별로 토큰을 나눠 둔다. */
+    --on-fg: #ffffff;
+    --on-primary: #ffffff;
+    --on-hot: #ffffff;
     --radius: 20px;
     --shadow: 0 1px 2px rgba(0, 27, 55, .04), 0 6px 20px rgba(0, 27, 55, .05);
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
+
+  /*
+   * hidden 속성을 저자 스타일보다 우선시킨다.
+   *
+   * 왜 !important 인가: 저자 스타일은 명시도와 무관하게 UA 스타일을 항상 이긴다.
+   * .feed 가 display:grid 를 지정하는 순간 UA 의 [hidden]{display:none} 이 무력해져
+   * 숨긴 피드가 그대로 렌더링된다. 실제로 이 결함으로 회사 카드 98개와 공고 카드
+   * 457개가 동시에 한 열에 쌓여 있었다. display 를 지정하는 요소에 hidden 을 쓰는
+   * 조합은 앞으로도 생기므로 개별 규칙이 아니라 여기서 한 번에 막는다.
+   */
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--bg); color: var(--fg);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
@@ -398,7 +424,7 @@ const DESIGN_TOKENS = `
     font-size: 11px; font-weight: 800; text-transform: uppercase;
     letter-spacing: .04em; padding: 4px 9px; border-radius: 6px;
   }
-  .grade-hot { background: var(--hot); color: #fff; }
+  .grade-hot { background: var(--hot); color: var(--on-hot); }
   .grade-warm { background: var(--warn-weak); color: var(--warn-fg); }
   .company { font-size: 15px; font-weight: 600; color: var(--fg2); margin-bottom: 2px; }
   .title {
@@ -432,6 +458,7 @@ const DESIGN_TOKENS = `
   }
   .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
   .card-top .grade { margin-left: auto; }
+  .why summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 `;
 
 /* ================================================================== *
@@ -600,16 +627,32 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
       ? '<span class="muted">—</span>'
       : `${days}일${archived ? '&#10003;' : ''}`;
 
+  // 처음 몇 줄만 펼쳐 두고 나머지는 버튼으로 연다.
+  //
+  // 왜 전부 펼치지 않는가: cresta 는 직무가 13개다. 전부 펼치면 카드 하나가 화면을
+  // 넘겨 회사 비교가 불가능해진다. 이 화면의 목적은 "어느 회사에 접근할까"이고
+  // 비교에는 여러 카드가 한 화면에 들어와야 한다.
+  //
+  // 왜 전부 접지 않는가: 자리 목록이 이 카드의 내용 그 자체다. 종전에는
+  // <details> 로 감싸 클릭해야 보였고, 자리가 하나인 회사는 그 하나마저 접혀
+  // 있었다 - 펼칠 게 없는데 펼치게 만든 셈이다.
+  //
+  // 가장 오래 막힌 자리가 제안의 출발점이므로 정렬 상위 3개를 보여준다.
+  const VISIBLE_ROLES = 3;
+  const hiddenRoles = Math.max(0, g.roles.length - VISIBLE_ROLES);
+
   const roles = g.roles
-    .map((r) => {
+    .map((r, ri) => {
       const age = ageCell(r.maxAge, r.ageFromArchive);
+      // 넘치는 줄도 DOM 에는 남긴다. 검색·감사가 같은 노드를 세기 때문이다.
+      const extra = ri >= VISIBLE_ROLES ? ' class="role-extra" hidden' : '';
 
       // 자리가 하나면 종전과 같이 제목에 링크를 건다. 이때는 base 가 아니라
       // 원문 제목을 쓴다 — 접을 게 없으므로 지역을 뗄 이유도 없다.
       const only = r.seats.length === 1 ? r.seats[0] : undefined;
       if (only) {
         return (
-          `<li><span class="role-age">${age}</span>` +
+          `<li${extra}><span class="role-age">${age}</span>` +
           `<span class="role-body">` +
           `<a href="${safeUrl(only.jobUrl)}" target="_blank" rel="noopener noreferrer">${esc(only.title)}</a>` +
           `</span></li>`
@@ -630,7 +673,7 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
         .join('');
 
       return (
-        `<li><span class="role-age">${age}</span>` +
+        `<li${extra}><span class="role-age">${age}</span>` +
         `<span class="role-body">` +
         `<span class="role-name">${esc(r.title)}` +
         `<span class="role-dup" title="같은 직무로 ${r.seats.length}건이 동시에 열려 있습니다">&times;${r.seats.length}</span>` +
@@ -666,22 +709,33 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
          data-tags="${esc(g.tags.slice(0, 4).join(', '))}">
   <div class="card-top">
     <span class="sig sig-${ageTone}">${esc(ageText)}</span>
-    <span class="group-n">${esc(seatText)}${g.hotCount > 0 ? ` · hot ${g.hotCount}` : ''}</span>
+    ${
+      // hot 은 가장 행동을 부르는 값이므로 자리 수와 같은 회색 칩에 섞지 않는다.
+      g.hotCount > 0
+        ? `<span class="group-hot">hot ${g.hotCount}</span>`
+        : ''
+    }
+    <span class="group-n">${esc(seatText)}</span>
   </div>
 
   <h2 class="title title-company">${esc(g.company)}</h2>
-  <div class="meta">${esc(g.board)}</div>
+  <div class="meta">${esc(g.board)}${collapsed ? ` · 공고 ${g.count}건을 직무 ${g.roleCount}개로 묶음` : ''}</div>
 
   ${tags ? `<div class="tags">${tags}</div>` : ''}
 
-  <details class="why"${g.count > 1 ? ' open' : ''}>
-    <summary>막혀 있는 자리 ${g.count}개${collapsed ? ` · 직무 ${g.roleCount}종` : ''}</summary>
-    <ul class="role-list">${roles}</ul>
-  </details>
+  <ul class="role-list" id="roles-${index}">${roles}</ul>
+  ${
+    hiddenRoles > 0
+      ? `<button type="button" class="role-toggle" data-more="${index}"
+             aria-expanded="false" aria-controls="roles-${index}"
+             data-label-more="직무 ${hiddenRoles}개 더 보기"
+             data-label-less="접기">직무 ${hiddenRoles}개 더 보기</button>`
+      : ''
+  }
 
   <div class="card-cta">
     <button type="button" class="btn-primary" data-gdraft="${index}">
-      회사 단위 콜드메일 초안 <span aria-hidden="true">&rarr;</span>
+      콜드메일 초안 <span aria-hidden="true">&rarr;</span>
     </button>
   </div>
 
@@ -816,7 +870,14 @@ function renderHtml(data: LeadsFile): string {
 <title>HireSignal 리드 — ${esc(generated.toISOString().slice(0, 10))}</title>
 <style>
 ${DESIGN_TOKENS}
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px 96px; }
+  /*
+   * 폭을 넓힌 이유: 이 화면의 목적은 회사 비교이고, 비교에는 여러 카드가 한 화면에
+   * 들어와야 한다. 720px 한 열에 98개 회사를 세로로 쌓으면 두 개씩 보이므로
+   * 비교가 아니라 스크롤 노동이 된다.
+   */
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 16px 96px; }
+  /* 산문은 넓은 열에서 읽기 어려우므로 별도로 좁힌다. */
+  .prose { max-width: 74ch; }
 
   header { padding: 32px 0 20px; }
   h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 6px; }
@@ -856,9 +917,9 @@ ${DESIGN_TOKENS}
     border-radius: 999px; padding: 9px 15px; white-space: nowrap;
     transition: background .12s, color .12s;
   }
-  .tab:hover { background: #e8ebee; }
+  .tab:hover { background: var(--hover); }
   .tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-  .tab[aria-pressed="true"] { background: var(--fg); color: #fff; }
+  .tab[aria-pressed="true"] { background: var(--fg); color: var(--on-fg); }
   .tab-n { font-size: 12px; opacity: .55; margin-left: 5px; font-weight: 500; }
   /* 경과일 분포 */
   .dist {
@@ -880,9 +941,11 @@ ${DESIGN_TOKENS}
   .bar-n { width: 42px; text-align: right; color: var(--muted); flex: 0 0 auto; }
   .dist-note { font-size: 12px; color: var(--muted); margin: 12px 0 0; }
 
-  /* 검색 + 보기 전환 + 정렬 */
-  .controls { display: flex; gap: 8px; margin-top: 10px; align-items: stretch; }
-  .search { flex: 1; min-width: 0; }
+  /* 검색 + 보기 전환 + 정렬.
+     flex-wrap 이 없으면 좁은 화면에서 검색창이 0 폭까지 짜부라진다 — 세그먼트
+     버튼 2개와 셀렉트는 폭이 고정이라 남는 공간을 검색창이 전부 뒤집어쓴다. */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: stretch; }
+  .search { flex: 1 1 240px; min-width: 0; }
   .search input {
     width: 100%; border: 0; background: var(--card); font: inherit; font-size: 15px;
     color: var(--fg); border-radius: 14px; padding: 13px 15px; box-shadow: var(--shadow);
@@ -912,14 +975,29 @@ ${DESIGN_TOKENS}
      필터를 눌렀는데 아무 피드백이 없으면 동작했는지 알 수 없다. */
   .result-count { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; }
 
-  .feed { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+  /*
+   * 반응형 그리드. auto-fill + minmax 로 폭에 따라 열 수가 정해진다.
+   * 카드 최소 폭 340px 은 "Senior Software Engineer, Backend (AI Agent Integrations)"
+   * 급 제목이 세 줄 안에 들어가는 하한이다.
+   *
+   * align-items:start 가 없으면 같은 행의 카드가 가장 큰 카드 높이로 늘어나
+   * 자리 목록 아래에 빈 공간이 생긴다.
+   */
+  .feed {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 12px; margin-top: 10px; align-items: start;
+  }
+  /* 초안을 펼친 카드는 전체 폭을 쓴다. JS 가 붙이는 클래스로 제어한다 —
+     :has() 로도 되지만 이 리포트는 file:// 로 열리는 경우가 많아 지원 폭이 넓은
+     쪽을 택한다. */
+  .feed .is-drafting { grid-column: 1 / -1; }
 
   /* CTA: 카드 우측 하단 단일 메인 버튼 */
   .card-cta { display: flex; justify-content: flex-end; margin-top: 16px; }
   .btn-primary {
     border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700;
-    color: #fff; background: var(--primary); border-radius: 12px; padding: 12px 18px;
-    transition: background .12s, transform .06s;
+    color: var(--on-primary); background: var(--primary); border-radius: 12px;
+    padding: 12px 18px; transition: background .12s, transform .06s;
   }
   .btn-primary:hover { background: var(--primary-dark); }
   .btn-primary:active { transform: scale(.985); }
@@ -935,7 +1013,7 @@ ${DESIGN_TOKENS}
     color: var(--primary); background: var(--primary-weak); border-radius: 8px;
     padding: 6px 12px; white-space: nowrap;
   }
-  .btn-ghost:hover { background: #d8ebff; }
+  .btn-ghost:hover { background: var(--primary-weak2); }
   .draft textarea {
     width: 100%; border: 0; border-radius: 10px; padding: 14px; resize: vertical;
     font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -952,19 +1030,41 @@ ${DESIGN_TOKENS}
     margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--fg2);
     background: var(--bg); border-radius: 999px; padding: 5px 11px; white-space: nowrap;
   }
-  .title-company { font-size: 22px; margin-bottom: 2px; }
-  .role-list { list-style: none; padding: 14px 16px; margin: 10px 0 0; }
+  .group-hot {
+    font-size: 12px; font-weight: 800; color: var(--on-hot); background: var(--hot);
+    border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+    letter-spacing: .01em;
+  }
+  .title-company { font-size: 20px; margin-bottom: 2px; }
+
+  /* 자리 목록. 배경을 깔아 카드 안에서 하나의 블록으로 읽히게 한다. */
+  .role-list {
+    list-style: none; margin: 12px 0 0; padding: 8px 14px;
+    background: var(--bg); border-radius: 14px;
+  }
+
+  .role-toggle {
+    margin-top: 8px; border: 0; cursor: pointer; font: inherit; font-size: 12.5px;
+    font-weight: 700; color: var(--primary); background: transparent; padding: 6px 2px;
+  }
+  .role-toggle:hover { text-decoration: underline; }
+  .role-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .role-list li {
     display: flex; gap: 10px; align-items: baseline; padding: 5px 0;
     font-size: 14px;
   }
-  .role-list li + li { border-top: 1px solid #eef1f4; padding-top: 8px; margin-top: 3px; }
+  /* 숨은 줄을 건너뛰고 경계선을 그린다. :not([hidden]) 이 없으면 접힌 상태에서
+     마지막 보이는 줄 아래에 선이 남는다. */
+  .role-list li:not([hidden]) + li:not([hidden]) {
+    border-top: 1px solid var(--line); padding-top: 8px; margin-top: 3px;
+  }
   .role-age {
     flex: 0 0 74px; font-size: 12.5px; font-weight: 700; color: var(--fg2);
     font-variant-numeric: tabular-nums;
   }
   .role-list a { color: var(--fg); text-decoration: none; font-weight: 600; }
   .role-list a:hover { color: var(--primary); text-decoration: underline; }
+  .role-list a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
   /* 같은 직무가 여러 건일 때: 제목 한 줄 + 자리 칩 한 줄.
      min-width:0 이 없으면 긴 제목이 flex 아이템을 밀어 카드를 넘친다. */
@@ -972,14 +1072,14 @@ ${DESIGN_TOKENS}
   .role-name { font-weight: 600; color: var(--fg); }
   .role-dup {
     display: inline-block; margin-left: 6px; padding: 0 6px;
-    border-radius: 999px; background: #fdecea; color: #b3261e;
+    border-radius: 999px; background: var(--dup-bg); color: var(--dup-fg);
     font-size: 11.5px; font-weight: 700; vertical-align: 1px;
   }
   .role-seats { display: flex; flex-wrap: wrap; gap: 5px; }
   /* .role-list a 보다 명시도가 높아야 색이 먹는다 (클래스 2개 > 클래스1+타입1). */
   .role-seats .seat {
-    padding: 1px 8px; border: 1px solid #e3e7ec; border-radius: 999px;
-    background: #fafbfc; color: var(--fg2); text-decoration: none;
+    padding: 1px 8px; border: 1px solid var(--chip-line); border-radius: 999px;
+    background: var(--chip-bg); color: var(--fg2); text-decoration: none;
     font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
   }
   .role-seats .seat:hover {
@@ -1018,11 +1118,57 @@ ${DESIGN_TOKENS}
   }
   .note strong { color: var(--fg); }
 
-  @media (max-width: 480px) {
-    .card { padding: 18px 18px 16px; }
+  @media (max-width: 560px) {
+    .card, .group-card { padding: 18px 18px 16px; }
     .title { font-size: 19px; }
-    .summary { padding: 16px; }
+    .title-company { font-size: 19px; }
+    .summary { grid-template-columns: repeat(2, 1fr); padding: 16px; }
     .card-cta .btn-primary { width: 100%; }
+    /* 좁은 화면에서는 검색이 한 줄을 다 쓰고 전환·정렬이 다음 줄로 내려간다. */
+    .search { flex: 1 1 100%; }
+    .seg, .sort { flex: 1 1 auto; }
+    .sort select { width: 100%; }
+    .role-age { flex-basis: 62px; }
+  }
+
+  /*
+   * 다크 모드. 토큰만 갈아끼운다.
+   *
+   * 이 리포트는 운영자가 매일 보는 화면이고, 밝은 배경 고정은 야간 작업에서
+   * 눈이 부신다. 공개 랜딩(docs/index.html)에는 적용하지 않는다 — 그쪽은
+   * 마케팅 페이지로 색을 직접 지정한 구획이 많아 토큰 교체만으로는 깨진다.
+   *
+   * 그림자를 어둡게 유지하면 어두운 배경에서 보이지 않으므로, 카드 구획을
+   * 그림자 대신 미세한 테두리로 잡는다.
+   */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --card: #1e2127;
+      --fg: #e8eaed;
+      --fg2: #b0b6bf;
+      --muted: #858c96;
+      --primary: #62a2ff;
+      --primary-dark: #8bbaff;
+      --primary-weak: #1b2b42;
+      --primary-weak2: #24395a;
+      --hot: #ff6b78;
+      --hot-weak: #3a1f24;
+      --warn-weak: #3a2f1c;
+      --warn-fg: #f0b45c;
+      --line: #2b2f37;
+      --hover: #2b2f37;
+      --chip-bg: #24272e;
+      --chip-line: #333842;
+      --dup-bg: #3a1f24;
+      --dup-fg: #ff8f99;
+      /* 솔리드 배경이 전부 밝아지므로 그 위 글자는 어두워야 한다. */
+      --on-fg: #16181d;
+      --on-primary: #0f1a2b;
+      --on-hot: #2a1013;
+      --shadow: 0 0 0 1px rgba(255, 255, 255, .05);
+    }
+    .search input, .sort select, .tab { box-shadow: var(--shadow); }
   }
 </style>
 </head>
@@ -1065,10 +1211,10 @@ ${DESIGN_TOKENS}
       <label class="sort">
         <span class="sr-only">정렬</span>
         <select id="sort" aria-label="정렬 기준">
-          <option value="default">기본 정렬</option>
-          <option value="age">오래된 순</option>
+          <option value="default">신호 강한 순</option>
+          <option value="age">오래 막힌 순</option>
           <option value="count">자리 많은 순</option>
-          <option value="company">회사명</option>
+          <option value="company">회사명 순</option>
         </select>
       </label>
     </div>
@@ -1082,7 +1228,7 @@ ${DESIGN_TOKENS}
 
   <details class="audit">
     <summary>직군 필터가 제외한 ${s.droppedByRole}건 감사</summary>
-    <p class="audit-note">
+    <p class="audit-note prose">
       이 필터는 정밀도를 위해 재현율을 희생합니다. 수임 가능한 직무를 잘못 걷어내면
       리드가 조용히 사라지므로, 무엇을 버렸는지 확인할 수 있어야 합니다.
       <code>other</code> 에 개발 직무가 보이면 <code>src/lib/signals/role.ts</code> 의
@@ -1091,7 +1237,7 @@ ${DESIGN_TOKENS}
     <div class="drops">${droppedRows}</div>
   </details>
 
-  <div class="note">
+  <div class="note prose">
     <strong>이 리포트를 읽는 법.</strong>
     기본은 <strong>회사별</strong> 보기입니다. 프리랜서는 공고가 아니라 회사에 제안하고,
     같은 회사의 여러 자리가 흩어져 있으면 같은 곳에 중복으로 연락하게 됩니다.
@@ -1104,6 +1250,10 @@ ${DESIGN_TOKENS}
     제안 논지를 바꿉니다 &mdash; "여러 분야를 못 뽑는다"보다 "이 한 자리를 여러 번
     시도하고도 못 뽑았다"가 더 강한 근거입니다. 접미사가 알려진 지역 표현일 때만 묶으므로,
     묶이지 않은 변형이 보이면 그대로 개별 직무로 읽으면 됩니다.
+    <br><br>
+    <strong>카드는 오래 막힌 직무 3개만 펼쳐 둡니다.</strong>
+    나머지는 <em>직무 N개 더 보기</em>로 엽니다. 전부 펼치면 직무가 13개인 회사 하나가
+    화면을 넘겨 회사 비교가 불가능해집니다. 검색은 접힌 직무까지 포함해 걸립니다.
     <br><br>
     <strong>콜드메일 초안은 템플릿 기반입니다.</strong>
     관측된 신호(경과일·집중 채용·스택)만으로 구성하며 LLM 을 쓰지 않습니다. 그래서
@@ -1210,7 +1360,36 @@ ${DESIGN_TOKENS}
     s.addEventListener('click', function () { setView(s.getAttribute('data-view')); });
   });
   sortSel.addEventListener('change', sortNow);
-  q.addEventListener('input', apply);
+
+  /* 검색은 디바운스한다.
+     결과 개수가 aria-live 영역이라, 키를 누를 때마다 갱신하면 스크린리더가 글자
+     수만큼 읽어대 오히려 방해가 된다. 필터링 자체도 카드 555개 속성 조회라
+     매 입력마다 돌릴 이유가 없다. */
+  var searchTimer = null;
+  q.addEventListener('input', function () {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(apply, 180);
+  });
+  /* 엔터·지우기는 기다리지 않고 즉시 반영한다. */
+  q.addEventListener('search', function () {
+    if (searchTimer) clearTimeout(searchTimer);
+    apply();
+  });
+
+  /* 직무 목록 더 보기. 넘치는 줄은 DOM 에 남아 있고 hidden 만 토글한다. */
+  groupFeed.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-more]');
+    if (!btn) return;
+    var card = btn.closest('article');
+    var extras = Array.prototype.slice.call(card.querySelectorAll('.role-extra'));
+    var open = btn.getAttribute('aria-expanded') === 'true';
+    extras.forEach(function (li) { li.hidden = open; });
+    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    btn.textContent = open
+      ? btn.getAttribute('data-label-more')
+      : btn.getAttribute('data-label-less');
+  });
+
   setView('company');
 
   /* ── 콜드메일 초안 ──
@@ -1323,8 +1502,9 @@ ${DESIGN_TOKENS}
         var i = openBtn.getAttribute(openAttr);
         var box = document.getElementById(idPrefix + '-' + i);
         var ta = document.getElementById(idPrefix + '-text-' + i);
+        var article = openBtn.closest('article');
         if (box.hidden) {
-          ta.value = builder(openBtn.closest('article'));
+          ta.value = builder(article);
           box.hidden = false;
           openBtn.setAttribute('data-label', openBtn.innerHTML);
           openBtn.textContent = '초안 닫기';
@@ -1334,6 +1514,9 @@ ${DESIGN_TOKENS}
           box.hidden = true;
           openBtn.innerHTML = openBtn.getAttribute('data-label') || '초안 생성';
         }
+        /* 초안을 열면 카드가 그리드 전체 폭을 쓴다. 340px 열에 이메일 초안을
+           넣으면 한 줄에 대여섯 단어만 들어가 다듬을 수 없다. */
+        article.classList.toggle('is-drafting', !box.hidden);
         return;
       }
 
@@ -1366,8 +1549,9 @@ ${DESIGN_TOKENS}
       var i = draftBtn.getAttribute('data-draft');
       var box = document.getElementById('draft-' + i);
       var ta = document.getElementById('draft-text-' + i);
+      var leadCard = draftBtn.closest('.card');
       if (box.hidden) {
-        ta.value = buildDraft(draftBtn.closest('.card'));
+        ta.value = buildDraft(leadCard);
         box.hidden = false;
         draftBtn.textContent = '초안 닫기';
         ta.focus();
@@ -1376,6 +1560,7 @@ ${DESIGN_TOKENS}
         box.hidden = true;
         draftBtn.innerHTML = '콜드메일 초안 생성 <span aria-hidden="true">&rarr;</span>';
       }
+      leadCard.classList.toggle('is-drafting', !box.hidden);
       return;
     }
 
