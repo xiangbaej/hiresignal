@@ -1,0 +1,30 @@
+{
+  "name": "hiresignal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "채용 공고를 프리랜서 B2B 리드 신호로 변환하는 ATS 스캐너",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "connectors:try": "tsx src/scripts/try-connectors.ts",
+    "boards:discover": "tsx src/scripts/discover-boards.ts",
+    "enrich": "tsx src/pipeline/enrich-archive.ts",
+    "enrich:stats": "tsx src/pipeline/enrich-archive.ts --stats",
+    "scan": "tsx src/pipeline/scan.ts",
+    "scan:report": "tsx src/pipeline/scan.ts --report",
+    "scan:dry": "tsx src/pipeline/scan.ts --dry-run",
+    "report:html": "tsx src/pipeline/report-html.ts",
+    "daily": "npm run enrich && npm run scan -- --report --export && npm run report:html"
+  },
+  "dependencies": {
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.7",
+    "tsx": "4.23.1",
+    "typescript": "5.7.3"
+  }
+}

@@ -1,0 +1,18 @@
+# 줄바꿈을 LF로 통일한다.
+#
+# 왜 필요한가: 개발은 Windows(CRLF), GitHub Actions 러너는 Linux(LF)에서 돌고,
+# 워크플로우가 매일 data/ 를 커밋한다. 정규화하지 않으면 같은 내용인데도 줄바꿈
+# 차이만으로 전체 파일이 변경된 것처럼 보이는 diff가 매일 쌓인다.
+* text=auto eol=lf
+
+# 관측 원장. append-only이므로 diff가 커지는 것이 정상이다.
+*.jsonl text eol=lf
+*.json text eol=lf
+
+# 산출물. 리뷰 대상이 아니므로 diff를 접어둔다.
+data/report.html linguist-generated=true
+data/leads.json linguist-generated=true
+data/state.json linguist-generated=true
+data/snapshots.jsonl linguist-generated=true
+data/runs.jsonl linguist-generated=true
+data/archive-cache.json linguist-generated=true

@@ -1,0 +1,1512 @@
+{
+  "_comment": "discover-boards.ts가 4개 ATS에 실측 프로브해 응답이 확인된 보드만 기록한다. jobCount/size는 발굴 시점 스냅샷이며 변동한다.",
+  "_targeting": "시리즈 A~C 규모(공고 5~150건) 중심. enterprise(151건+)는 조달 프로세스로 프리랜서 콜드메일이 전환되지 않아 제외. 근거: 대기업 보드 2663건 중 freelance 표현 1건.",
+  "_excluded": "데모 보드(leverdemo 등)는 evergreen.ts의 DEMO_BOARD_SLUGS로 이중 차단한다.",
+  "_merge_policy": "이 파일은 병합으로 갱신된다. 프로브 일시 실패로 보드가 사라지면 scan.ts의 pruneBoards가 관측 이력까지 삭제하므로, 기존 항목은 enterprise 규모로 커진 경우에만 제외한다.",
+  "companies": [
+    {
+      "atsProvider": "ashby",
+      "slug": "abridge",
+      "displayName": "abridge",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 44,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "absorblms",
+      "displayName": "absorblms",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 30,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "airbyte",
+      "displayName": "airbyte",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "alchemy",
+      "displayName": "alchemy",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "anyscale",
+      "displayName": "anyscale",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 21,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "ashby",
+      "displayName": "ashby",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 58,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "astronomer",
+      "displayName": "astronomer",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 25,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "atlan",
+      "displayName": "atlan",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "attio",
+      "displayName": "attio",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 37,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "baseten",
+      "displayName": "baseten",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 62,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "blacksmith",
+      "displayName": "blacksmith",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "braintrust",
+      "displayName": "braintrust",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 24,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "browserbase",
+      "displayName": "browserbase",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "cartesia",
+      "displayName": "cartesia",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 28,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "cerebras",
+      "displayName": "cerebras",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 122,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "chalk",
+      "displayName": "chalk",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 14,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "chromatic",
+      "displayName": "chromatic",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "circleback",
+      "displayName": "circleback",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "codat",
+      "displayName": "codat",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "coder",
+      "displayName": "coder",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 16,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "coderabbit",
+      "displayName": "coderabbit",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 54,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "cohere",
+      "displayName": "cohere",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 137,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "column",
+      "displayName": "column",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 23,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "cube",
+      "displayName": "cube",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 33,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "cursor",
+      "displayName": "cursor",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 119,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "decagon",
+      "displayName": "decagon",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 115,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "deepgram",
+      "displayName": "deepgram",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 78,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "diagrid",
+      "displayName": "diagrid",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "docebo",
+      "displayName": "docebo",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 52,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "e2b",
+      "displayName": "e2b",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 15,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "encord",
+      "displayName": "encord",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 37,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "etched",
+      "displayName": "etched",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 110,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "fireworks",
+      "displayName": "fireworks",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 49,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "footprint",
+      "displayName": "footprint",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 10,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "friendliai",
+      "displayName": "friendliai",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 18,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "gooddata",
+      "displayName": "gooddata",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "granola",
+      "displayName": "granola",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 16,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "graphite",
+      "displayName": "graphite",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "hyperbolic",
+      "displayName": "hyperbolic",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "incident",
+      "displayName": "incident",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 20,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "jellyfish",
+      "displayName": "jellyfish",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "kombo",
+      "displayName": "kombo",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "kong",
+      "displayName": "kong",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 92,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "lago",
+      "displayName": "lago",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "lancedb",
+      "displayName": "lancedb",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "langchain",
+      "displayName": "langchain",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 91,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "langfuse",
+      "displayName": "langfuse",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "lightdash",
+      "displayName": "lightdash",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "lightning",
+      "displayName": "lightning",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "linear",
+      "displayName": "linear",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 23,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "litellm",
+      "displayName": "litellm",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "livekit",
+      "displayName": "livekit",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 26,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "llamaindex",
+      "displayName": "llamaindex",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 14,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "materialize",
+      "displayName": "materialize",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "merge",
+      "displayName": "merge",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 18,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "metaview",
+      "displayName": "metaview",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 34,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "middesk",
+      "displayName": "middesk",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 22,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "mintlify",
+      "displayName": "mintlify",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 16,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "miro",
+      "displayName": "miro",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 42,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "modal",
+      "displayName": "modal",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 34,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "montecarlodata",
+      "displayName": "montecarlodata",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "nabla",
+      "displayName": "nabla",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 14,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "namespace",
+      "displayName": "namespace",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 10,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "netbird",
+      "displayName": "netbird",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "nomic",
+      "displayName": "nomic",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "omni",
+      "displayName": "omni",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 21,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "openevidence",
+      "displayName": "openevidence",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "openrouter",
+      "displayName": "openrouter",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 18,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "orb",
+      "displayName": "orb",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 26,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "oso",
+      "displayName": "oso",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "paddle",
+      "displayName": "paddle",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 19,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "perplexity",
+      "displayName": "perplexity",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 86,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "persona",
+      "displayName": "persona",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 19,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "phoenix",
+      "displayName": "phoenix",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "phrase",
+      "displayName": "phrase",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "pinecone",
+      "displayName": "pinecone",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "plane",
+      "displayName": "plane",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 10,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "pleo",
+      "displayName": "pleo",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 43,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "poolside",
+      "displayName": "poolside",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 16,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "posthog",
+      "displayName": "posthog",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "prefect",
+      "displayName": "prefect",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "primer",
+      "displayName": "primer",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 19,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "propel",
+      "displayName": "propel",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "railway",
+      "displayName": "railway",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "rain",
+      "displayName": "rain",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 40,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "ramp",
+      "displayName": "ramp",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 125,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "render",
+      "displayName": "render",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 34,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "replit",
+      "displayName": "replit",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 86,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "resend",
+      "displayName": "resend",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 10,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "restate",
+      "displayName": "restate",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "roboflow",
+      "displayName": "roboflow",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 27,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "runpod",
+      "displayName": "runpod",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 21,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "sanity",
+      "displayName": "sanity",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 25,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "sardine",
+      "displayName": "sardine",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 40,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "semgrep",
+      "displayName": "semgrep",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "sentilink",
+      "displayName": "sentilink",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 43,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "sentry",
+      "displayName": "sentry",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 47,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "sfcompute",
+      "displayName": "sfcompute",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "signoz",
+      "displayName": "signoz",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 15,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "socket",
+      "displayName": "socket",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 24,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "socure",
+      "displayName": "socure",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 91,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "speakeasy",
+      "displayName": "speakeasy",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "stytch",
+      "displayName": "stytch",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "supabase",
+      "displayName": "supabase",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 56,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "swarmia",
+      "displayName": "swarmia",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "sweep",
+      "displayName": "sweep",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "temporal",
+      "displayName": "temporal",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 58,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "trulioo",
+      "displayName": "trulioo",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 23,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "turnkey",
+      "displayName": "turnkey",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "twenty",
+      "displayName": "twenty",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 31,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "unit",
+      "displayName": "unit",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "unstructured",
+      "displayName": "unstructured",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "vanta",
+      "displayName": "vanta",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 101,
+      "size": "large"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "vultr",
+      "displayName": "vultr",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 63,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "warp",
+      "displayName": "warp",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 19,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "workos",
+      "displayName": "workos",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 24,
+      "size": "target"
+    },
+    {
+      "atsProvider": "ashby",
+      "slug": "zero",
+      "displayName": "zero",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "algolia",
+      "displayName": "algolia",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 41,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "alloy",
+      "displayName": "alloy",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 20,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "amplitude",
+      "displayName": "amplitude",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 43,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "arizeai",
+      "displayName": "arizeai",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 30,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "assemblyai",
+      "displayName": "assemblyai",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "axiom",
+      "displayName": "axiom",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 18,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "beam",
+      "displayName": "beam",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "bitmovin",
+      "displayName": "bitmovin",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "builder",
+      "displayName": "builder",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "buildkite",
+      "displayName": "buildkite",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 10,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "chainguard",
+      "displayName": "chainguard",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 67,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "cockroachlabs",
+      "displayName": "cockroachlabs",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 32,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "contentful",
+      "displayName": "contentful",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 27,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "cresta",
+      "displayName": "cresta",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 98,
+      "size": "large"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "customerio",
+      "displayName": "customerio",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 25,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "descope",
+      "displayName": "descope",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "descript",
+      "displayName": "descript",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 10,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "endorlabs",
+      "displayName": "endorlabs",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 25,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "fireblocks",
+      "displayName": "fireblocks",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 66,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "galileo",
+      "displayName": "galileo",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "greenhouse",
+      "displayName": "greenhouse",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 23,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "gusto",
+      "displayName": "gusto",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 79,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "hackerrank",
+      "displayName": "hackerrank",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 33,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "hiddenlayer",
+      "displayName": "hiddenlayer",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 7,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "hightouch",
+      "displayName": "hightouch",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 67,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "honeycomb",
+      "displayName": "honeycomb",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "justworks",
+      "displayName": "justworks",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 93,
+      "size": "large"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "labelbox",
+      "displayName": "labelbox",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "launchdarkly",
+      "displayName": "launchdarkly",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 34,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "learnupon",
+      "displayName": "learnupon",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "mercury",
+      "displayName": "mercury",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 56,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "mixpanel",
+      "displayName": "mixpanel",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 44,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "netlify",
+      "displayName": "netlify",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "orkes",
+      "displayName": "orkes",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "otter",
+      "displayName": "otter",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 26,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "planetscale",
+      "displayName": "planetscale",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "prove",
+      "displayName": "prove",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "pubnub",
+      "displayName": "pubnub",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "sendbird",
+      "displayName": "sendbird",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 18,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "sigmacomputing",
+      "displayName": "sigmacomputing",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 72,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "singlestore",
+      "displayName": "singlestore",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 36,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "speechmatics",
+      "displayName": "speechmatics",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 12,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "stackblitz",
+      "displayName": "stackblitz",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "storyblok",
+      "displayName": "storyblok",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 12,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "tailscale",
+      "displayName": "tailscale",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 51,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "tenstorrent",
+      "displayName": "tenstorrent",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 127,
+      "size": "large"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "truefoundry",
+      "displayName": "truefoundry",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 24,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "vercel",
+      "displayName": "vercel",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 79,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "veriff",
+      "displayName": "veriff",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 13,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "workstream",
+      "displayName": "workstream",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 29,
+      "size": "target"
+    },
+    {
+      "atsProvider": "greenhouse",
+      "slug": "yugabyte",
+      "displayName": "yugabyte",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 15,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "360learning",
+      "displayName": "360learning",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 32,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "anchorage",
+      "displayName": "anchorage",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 45,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "cloudinary",
+      "displayName": "cloudinary",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 27,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "finch",
+      "displayName": "finch",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 11,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "finix",
+      "displayName": "finix",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 8,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "frontify",
+      "displayName": "frontify",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "hevodata",
+      "displayName": "hevodata",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 41,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "logrocket",
+      "displayName": "logrocket",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 6,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "matillion",
+      "displayName": "matillion",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 20,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "neon",
+      "displayName": "neon",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 14,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "pipedrive",
+      "displayName": "pipedrive",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 17,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "playbook",
+      "displayName": "playbook",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 12,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "porter",
+      "displayName": "porter",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 27,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "scaleway",
+      "displayName": "scaleway",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 32,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "sonarsource",
+      "displayName": "sonarsource",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 117,
+      "size": "large"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "spreedly",
+      "displayName": "spreedly",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 5,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "sysdig",
+      "displayName": "sysdig",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "lever",
+      "slug": "zilliz",
+      "displayName": "zilliz",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 12,
+      "size": "target"
+    },
+    {
+      "atsProvider": "smartrecruiters",
+      "slug": "gong",
+      "displayName": "gong",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 9,
+      "size": "target"
+    },
+    {
+      "atsProvider": "smartrecruiters",
+      "slug": "together",
+      "displayName": "together",
+      "verifiedAt": "2026-07-30",
+      "jobCount": 20,
+      "size": "target"
+    }
+  ]
+}

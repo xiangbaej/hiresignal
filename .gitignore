@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+dist/
+*.log
+.DS_Store
+tmp/
+
+# 원자적 쓰기 중간 파일. 정상 종료 시 rename되어 남지 않지만 방어적으로 제외한다.
+data/*.tmp
+
+# data/ 자체는 의도적으로 커밋한다.
+# 관측 스냅샷이 이 제품의 핵심 자산이고, GitHub Actions 실행 간 상태를
+# 이어받는 방법이기도 하다. 규모가 커지면 Postgres로 이관한다.
