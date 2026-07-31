@@ -45,6 +45,7 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REPORT = path.join(ROOT, 'data', 'report.html');
 const PUBLIC = path.join(ROOT, 'docs', 'index.html');
+const LEADS = path.join(ROOT, 'data', 'leads.json');
 
 /* ================================================================== *
  * 미니 러너
@@ -106,6 +107,13 @@ interface Env {
 }
 
 let html = '';
+
+/** 원본 데이터. 생성물이 이것과 어긋나지 않는지 대조하는 데 쓴다. */
+interface LeadsFile {
+  summary: { total: number; hot: number; warm: number };
+  leads: Array<{ board: string; company: string; jobUrl: string }>;
+}
+let leads: LeadsFile | null = null;
 
 /**
  * 생성물을 실제 DOM 에 올린다.
@@ -1134,6 +1142,69 @@ test('도움말에 적힌 단축키는 모두 테스트로 덮여 있다', (env)
   );
 });
 
+test('데이터 무결성: 리드가 한 건도 사라지지 않는다', (env) => {
+  // 지금까지의 단정은 DOM 끼리 비교한다. 렌더러가 리드를 통째로 흘려도 내부 일관성은
+  // 유지되므로 아무도 눈치채지 못한다. 원본과 대조해야 그걸 잡는다.
+  //
+  // 이 제품에서 리드가 조용히 사라지는 것은 가장 비싼 실패다 - 잘못된 리드는 보고
+  // 버리면 되지만, 없는 리드는 존재를 모른다.
+  assert(leads !== null, 'leads.json 을 읽었다');
+  const total = leads!.summary.total;
+
+  // 공고별 보기: 카드 수가 원본 총계와 같아야 한다
+  assertEqual(env.allLeads().length, total, `공고 카드 ${env.allLeads().length} == ${total}`);
+
+  // 회사별 보기: data-count 합이 총계와 같아야 한다
+  const seats = (env.allGroups() as any[]).reduce(
+    (s, el) => s + Number(el.getAttribute('data-count') || 0),
+    0,
+  );
+  assertEqual(seats, total, `회사 카드의 자리 합 ${seats} == ${total}`);
+
+  // 접기로 링크가 사라지지 않았는지. 직무를 묶어도 개별 공고 링크는 전부 남아야
+  // 한다 - 근거를 확인할 수 없는 요약은 이 리포트에서 가치가 없다.
+  let links = 0;
+  for (const card of env.allGroups() as any[]) {
+    const chips = card.querySelectorAll('.seat').length;
+    const singles = card.querySelectorAll('.role-body > a').length;
+    links += chips + singles;
+  }
+  assertEqual(links, total, `회사 카드의 자리 링크 ${links} == ${total}`);
+
+  // 회사 수도 원본에서 센 것과 같아야 한다 (보드 기준으로 묶는다)
+  const boards = new Set(leads!.leads.map((l) => l.board || l.company));
+  assertEqual(env.allGroups().length, boards.size, `회사 카드 수 == 보드 수 ${boards.size}`);
+
+  // 요약 숫자가 원본과 맞는지. 화면 숫자와 데이터가 어긋나면 사용자가 전체를 의심한다.
+  const summaryNums = (Array.from(env.doc.querySelectorAll('.summary .n')) as any[]).map(
+    (el) => Number(el.textContent),
+  );
+  assert(summaryNums.includes(total), `요약에 총 리드 수 ${total} 이 있다`);
+  assert(summaryNums.includes(leads!.summary.hot), `요약에 hot ${leads!.summary.hot} 이 있다`);
+  assert(
+    summaryNums.includes(boards.size),
+    `요약에 회사 수 ${boards.size} 가 있다`,
+  );
+});
+
+test('데이터 무결성: 모든 링크가 원본 공고 URL 이다', (env) => {
+  // 우리는 공고 본문을 재배포하지 않고 원문으로 보낸다. 링크가 원본 집합을 벗어나면
+  // 그 원칙이 깨졌거나 URL 이 가공된 것이다.
+  const known = new Set(leads!.leads.map((l) => l.jobUrl));
+
+  const cardLinks = (Array.from(
+    env.doc.querySelectorAll('.group-card a[target="_blank"], .card .title a'),
+  ) as any[]).map((a) => a.getAttribute('href'));
+
+  assert(cardLinks.length > 0, '링크가 있다');
+  const foreign = cardLinks.filter((href) => !known.has(href));
+  assertEqual(
+    foreign.length,
+    0,
+    `원본에 없는 링크 ${foreign.length}건: ${foreign.slice(0, 2).join(' ')}`,
+  );
+});
+
 test('접근성: 필터 컨트롤에 aria 상태가 있다', (env) => {
   for (const sel of ['.tab', '.seg-btn']) {
     const els = Array.from(env.doc.querySelectorAll(sel)) as any[];
@@ -1332,12 +1403,17 @@ publicTest('다크 모드 토큰이 공개 페이지에도 있다', (env) => {
  * 실행
  * ================================================================== */
 
-/** 케이스 목록을 돌린다. 각 케이스는 새 문서에서 시작한다. */
+/**
+ * 케이스 목록을 돌린다. 각 케이스는 새 문서에서 시작한다.
+ *
+ * 테스트 간 localStorage 격리를 따로 하지 않는다. jsdom 은 인스턴스 사이에 저장소를
+ * 공유하지 않으므로 새 문서는 항상 빈 저장소로 출발한다 - 그 성질 때문에 "다음 방문"
+ * 재현에는 beforeParse 로 심어야 했다. 같은 이유로 여기서 비울 것도 없다.
+ */
 async function runSuite(
   label: string,
   list: Array<[string, (env: Env) => Promise<void> | void]>,
   factory: () => Promise<Env>,
-  isolateStorage: boolean,
 ): Promise<void> {
   console.log(label);
   for (const [name, fn] of list) {
@@ -1346,20 +1422,10 @@ async function runSuite(
     let env: Env | null = null;
     try {
       env = await factory();
-      if (isolateStorage) {
-        // 테스트 간 격리. localStorage 는 오리진 단위로 공유되므로 문서를 만든 직후
-        // 비우고, 스크립트가 이미 읽은 상태를 지우기 위해 다시 만든다.
-        env.win.localStorage.clear();
-        env.win.close();
-        env = await factory();
-      }
       await fn(env);
     } catch (err) {
       failures.push({ test: name, message: `예외: ${(err as Error).message}` });
     } finally {
-      if (isolateStorage) {
-        try { env?.win.localStorage.clear(); } catch {}
-      }
       try { env?.win.close(); } catch {}
     }
     const failed = failures.length - before;
@@ -1384,6 +1450,7 @@ async function runSuite(
 async function main(): Promise<void> {
   html = await readFile(REPORT, 'utf8');
   publicHtml = await readFile(PUBLIC, 'utf8');
+  leads = JSON.parse(await readFile(LEADS, 'utf8')) as LeadsFile;
 
   const kb = (s: string) => (s.length / 1024).toFixed(0);
   console.log(
@@ -1391,12 +1458,14 @@ async function main(): Promise<void> {
   );
   console.log('');
 
-  await runSuite('[내부 리포트]', tests, () => makeEnv(), true);
-  await runSuite('[공개 티저]', publicTests, makePublicEnv, false);
+  const startedAt = Date.now();
+  await runSuite('[내부 리포트]', tests, () => makeEnv());
+  await runSuite('[공개 티저]', publicTests, makePublicEnv);
 
   const totalTests = tests.length + publicTests.length;
+  const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
   console.log(
-    `${passedTests}/${totalTests} 테스트 통과 · 단정 ${assertions}개` +
+    `${passedTests}/${totalTests} 테스트 통과 · 단정 ${assertions}개 · ${secs}초` +
       (failures.length ? ` · 실패 ${failures.length}건` : ''),
   );
   if (failures.length > 0) process.exitCode = 1;
