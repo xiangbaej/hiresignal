@@ -1139,6 +1139,14 @@ ${DESIGN_TOKENS}
   .is-contacted { opacity: .55; }
   .is-contacted:hover, .is-contacted:focus-within { opacity: 1; }
 
+  /* 후속 검토 대상. 오래된 연락은 사실상 미연락이므로 덜 내리고, 버튼을 경고 톤으로
+     바꿔 "다시 볼 것"임을 알린다. 필터 의미는 건드리지 않는다 - 미연락만은
+     "한 번도 연락하지 않은 곳"으로 남는다. 그게 예측 가능하다. */
+  .is-contacted.is-stale { opacity: .82; }
+  .is-stale .btn-mark[aria-pressed="true"] {
+    background: var(--warn-weak); color: var(--warn-fg);
+  }
+
   /* j/k 로 선택한 카드. 브라우저 기본 포커스 링은 프로그램적 포커스에서 잘 안
      나타나므로 명시적으로 표시한다. outline 을 쓰면 그리드 간격을 먹지 않는다. */
   .is-focused { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -1283,6 +1291,48 @@ ${DESIGN_TOKENS}
     .seg, .sort { flex: 1 1 auto; }
     .sort select { width: 100%; }
     .role-age { flex-basis: 62px; }
+  }
+
+  /*
+   * 인쇄 · PDF.
+   *
+   * 종이에는 상호작용이 없으므로 조작 장치를 전부 뺀다. 대신 화면에서 접어 둔
+   * 직무를 모두 펼친다 - 인쇄물에서 "직무 10개 더 보기"는 누를 수 없는 안내이고,
+   * 접힌 내용은 영구히 사라진다.
+   *
+   * 필터로 걸러진 카드는 그대로 빠진다. 화면에서 좁혀 둔 작업 목록을 그대로
+   * 출력하는 것이 인쇄를 누르는 이유이기 때문이다.
+   */
+  @media print {
+    /* 조작 장치. 종이에서는 누를 수 없다. */
+    .sticky, .count-row, .help, .dist, .card-cta, .draft, .role-toggle, .empty {
+      display: none !important;
+    }
+
+    .wrap { max-width: none; padding: 0; }
+    /* 한 열로 떨어뜨린다. 인쇄 폭에서 340px 두 열은 글자가 깨진다. */
+    .feed { display: block; }
+    .group-card, .card {
+      box-shadow: none; border: 1px solid #ccc; margin-bottom: 10px;
+      /* 카드가 페이지 경계에서 쪼개지면 근거를 이어 읽을 수 없다. */
+      break-inside: avoid; page-break-inside: avoid;
+    }
+
+    /* 접힌 직무를 모두 펼친다. [hidden] 이 !important 라 여기서도 필요하다. */
+    .role-list li[hidden] { display: flex !important; }
+    .role-list li + li { border-top: 1px solid #eee; padding-top: 8px; margin-top: 3px; }
+
+    /* 연락한 회사를 옅게 두면 종이에서 읽히지 않는다. 표시는 배지가 대신한다. */
+    .is-contacted { opacity: 1; }
+    .is-focused { outline: none; }
+
+    /* 배경색은 기본 설정에서 인쇄되지 않는 경우가 많아 테두리로 구분한다.
+       여기서만 색을 직접 쓴다 - 종이는 항상 흰 배경이므로 테마 토큰을 따를 이유가
+       없고, 다크 토큰을 그대로 쓰면 검은 배경에 검은 잉크가 된다. */
+    .sig, .group-n, .group-hot, .tag, .role-dup, .seat {
+      border: 1px solid #999; background: none !important; color: #000 !important;
+    }
+    a { color: #000; text-decoration: underline; }
   }
 
   /* 다크 토큰은 DESIGN_TOKENS 에 있어 두 화면이 함께 따라온다.
@@ -1469,16 +1519,44 @@ ${DESIGN_TOKENS}
     try { localStorage.setItem(STORE_KEY, JSON.stringify(contacted)); } catch (err) {}
   }
 
+  /* 이 기간이 지난 연락은 후속 검토 대상으로 본다.
+     30일은 상대가 답하지 않았다면 다시 접근해도 무례하지 않다고 보는 선이다.
+     "연락함"과 "45일 전에 연락함"이 같은 모양이면 후속 시점을 판단할 수 없다. */
+  var FOLLOWUP_DAYS = 30;
+
+  function daysSince(iso) {
+    var t = Date.parse(iso);
+    if (isNaN(t)) return null;
+    return Math.floor((Date.now() - t) / 86400000);
+  }
+
   function paintContacted(card) {
     var key = card.getAttribute('data-key');
     var on = !!contacted[key];
+    var days = on ? daysSince(contacted[key]) : null;
+    var stale = days !== null && days >= FOLLOWUP_DAYS;
     var btn = card.querySelector('[data-mark]');
+
     card.classList.toggle('is-contacted', on);
-    if (btn) {
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      btn.innerHTML = on
-        ? '<span aria-hidden="true">&#9745;</span> 연락함'
-        : '<span aria-hidden="true">&#9633;</span> 연락함';
+    card.classList.toggle('is-stale', !!stale);
+
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+
+    var label = '연락함';
+    if (on && days !== null) {
+      label = days === 0 ? '오늘 연락' : days + '일 전 연락';
+    }
+    btn.innerHTML =
+      '<span aria-hidden="true">' + (on ? '&#9745;' : '&#9633;') + '</span> ' + label;
+
+    if (stale) {
+      btn.setAttribute(
+        'title',
+        FOLLOWUP_DAYS + '일이 지났습니다. 답이 없었다면 후속 연락을 검토하세요.',
+      );
+    } else {
+      btn.removeAttribute('title');
     }
   }
 

@@ -1,7 +1,10 @@
 /**
- * 리포트 UI 행동 테스트.
+ * 생성물 UI 행동 테스트. 두 산출물을 모두 본다.
  *
  *   npm run ui:test
+ *
+ *   data/report.html   운영자용 내부 리포트 (상태 기계)
+ *   docs/index.html    공개 티저 (이 사업의 검증 장치)
  *
  * ── 왜 필요한가 ──
  *
@@ -11,10 +14,17 @@
  * 훑어서는 검증되지 않는다 - "속성이 있다"와 "눌렀을 때 의도대로 동작한다"는 다른
  * 주장이다.
  *
- * 실제로 정적 검사만 하던 동안 두 건의 결함이 사람 눈에만 걸렸다.
+ * 실제로 정적 검사만 하던 동안 다음 결함들이 사람 눈에만 걸렸다.
  *   - `.feed { display:flex }` 가 [hidden] 을 덮어 두 피드가 동시에 렌더된 것
  *   - 셀렉트 정렬 변경이 URL 에 저장되지 않은 것(단축키 경로만 저장)
- * 둘 다 "클릭하고 결과를 본다"로 즉시 잡히는 종류다.
+ * 그리고 이 테스트를 붙인 첫 실행에서 세 건이 더 드러났다.
+ *   - setView 가 Hot·미연락 필터의 aria-pressed 까지 덮어 필터가 조용히 꺼진 것
+ *   - j/k 가 화면 순서가 아니라 원래 배열 순서로 이동한 것
+ *   - 초안을 열면 포커스가 textarea 로 가서 키보드로 빠져나올 수 없던 것
+ * 전부 "클릭하고 결과를 본다"로만 잡히는 종류다.
+ *
+ * 공개 티저도 함께 본다. 내부 리포트가 깨지면 운영자만 불편하지만, 공개 페이지가
+ * 깨지면 액세스 요청 수로 수요를 측정하는 이 사업의 검증 장치 자체가 멈춘다.
  *
  * ── 방법 ──
  *
@@ -34,6 +44,7 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REPORT = path.join(ROOT, 'data', 'report.html');
+const PUBLIC = path.join(ROOT, 'docs', 'index.html');
 
 /* ================================================================== *
  * 미니 러너
@@ -312,6 +323,79 @@ test('연락 표시: 저장된 이력이 다음 방문에 복원된다', async (
     );
     assertEqual(restored.classList.contains('is-contacted'), true, '옅은 상태도 복원');
     assert(next.countText().includes('연락함 1곳'), `개수 표시에도 반영: "${next.countText()}"`);
+  } finally {
+    next.win.close();
+  }
+});
+
+test('연락 표시: 경과일이 보이고 오래된 연락은 후속 대상으로 표시된다', async (env) => {
+  // 회사 키를 먼저 얻는다. 특정 회사명을 박으면 데이터가 바뀐 날 실패한다.
+  const [a, b, c] = env.visibleGroups().slice(0, 3) as any[];
+  const iso = (daysAgo: number) =>
+    new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
+
+  const seed = JSON.stringify({
+    [a.getAttribute('data-key')]: iso(0),
+    [b.getAttribute('data-key')]: iso(5),
+    [c.getAttribute('data-key')]: iso(45),
+  });
+
+  const next = await makeEnv('', { seedStorage: seed });
+  try {
+    const find = (el: any) =>
+      next.doc.querySelector(`.group-card[data-key="${el.getAttribute('data-key')}"]`);
+
+    const today = find(a);
+    const recent = find(b);
+    const old = find(c);
+
+    assert(
+      today.querySelector('[data-mark]').textContent.includes('오늘 연락'),
+      `오늘: "${today.querySelector('[data-mark]').textContent.trim()}"`,
+    );
+    assert(
+      recent.querySelector('[data-mark]').textContent.includes('5일 전 연락'),
+      `5일 전: "${recent.querySelector('[data-mark]').textContent.trim()}"`,
+    );
+    assert(
+      old.querySelector('[data-mark]').textContent.includes('45일 전 연락'),
+      `45일 전: "${old.querySelector('[data-mark]').textContent.trim()}"`,
+    );
+
+    assertEqual(today.classList.contains('is-stale'), false, '오늘 연락은 후속 대상 아님');
+    assertEqual(recent.classList.contains('is-stale'), false, '5일 전도 아님');
+    assertEqual(old.classList.contains('is-stale'), true, '45일 전은 후속 대상');
+    assert(
+      (old.querySelector('[data-mark]').getAttribute('title') || '').includes('후속'),
+      '후속 검토 사유를 title 로 알린다',
+    );
+    assertEqual(
+      recent.querySelector('[data-mark]').getAttribute('title'),
+      null,
+      '최근 연락에는 title 을 붙이지 않는다',
+    );
+
+    // 필터 의미는 바뀌지 않아야 한다. 미연락만 = 한 번도 연락하지 않은 곳.
+    next.click(next.byId('only-todo'));
+    assertEqual(next.shown(old), false, '오래된 연락도 미연락만 필터에서는 제외된다');
+  } finally {
+    next.win.close();
+  }
+});
+
+test('연락 표시: 날짜가 깨져 있어도 표시는 유지된다', async (env) => {
+  // 손으로 붙여넣은 JSON 에 날짜가 아닌 값이 들어올 수 있다. 그때 라벨이 NaN 이
+  // 되거나 던지면 안 된다.
+  const key = env.visibleGroups()[0].getAttribute('data-key');
+  const next = await makeEnv('', { seedStorage: JSON.stringify({ [key]: '날짜아님' }) });
+  try {
+    const card = next.doc.querySelector(`.group-card[data-key="${key}"]`);
+    const btn = card.querySelector('[data-mark]');
+    assertEqual(btn.getAttribute('aria-pressed'), 'true', '표시는 유지된다');
+    assertEqual(card.classList.contains('is-contacted'), true, '옅은 상태도 유지');
+    assertEqual(card.classList.contains('is-stale'), false, '후속 대상으로 오판하지 않는다');
+    assert(!btn.textContent.includes('NaN'), `NaN 이 새지 않는다: "${btn.textContent.trim()}"`);
+    assert(btn.textContent.includes('연락함'), '경과일 없이 기본 라벨로 떨어진다');
   } finally {
     next.win.close();
   }
@@ -989,6 +1073,41 @@ test('모든 외부 링크가 안전 속성을 갖는다', (env) => {
   assertEqual(badScheme.length, 0, `http(s) 아닌 링크 ${badScheme.length}건`);
 });
 
+test('인쇄 스타일이 조작 장치를 빼고 접힌 직무를 펼친다', (env) => {
+  // jsdom 은 print 미디어를 적용하지 않으므로 규칙의 존재를 본다. 실제 렌더 확인은
+  // 브라우저 인쇄 미리보기가 필요하다 - 여기서 지키려는 것은 "규칙이 사라지지
+  // 않는 것"이다.
+  const css = (Array.from(env.doc.querySelectorAll('style')) as any[])
+    .map((el) => el.textContent)
+    .join('\n');
+  const at = css.indexOf('@media print');
+  assert(at !== -1, '인쇄 스타일이 존재한다');
+
+  // @media print 블록만 잘라낸다 (중첩 중괄호를 세어 끝을 찾는다)
+  let depth = 0;
+  let end = at;
+  for (let i = css.indexOf('{', at); i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}') {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+  const block = css.slice(at, end + 1);
+
+  // 종이에서 누를 수 없는 것들이 빠져야 한다
+  for (const sel of ['.sticky', '.card-cta', '.draft', '.role-toggle', '.count-row']) {
+    assert(block.includes(sel), `인쇄에서 ${sel} 을 숨긴다`);
+  }
+  // 접힌 직무를 펼쳐야 한다. [hidden] 이 !important 라 덮어쓰기가 필요하다.
+  assert(
+    /\.role-list li\[hidden\]\s*\{[^}]*display:\s*flex\s*!important/.test(block),
+    '접힌 직무를 인쇄에서 펼친다',
+  );
+  assert(/break-inside:\s*avoid/.test(block), '카드가 페이지 경계에서 쪼개지지 않는다');
+  assert(/\.feed\s*\{[^}]*display:\s*block/.test(block), '인쇄에서는 한 열로 떨어진다');
+});
+
 test('도움말에 적힌 단축키는 모두 테스트로 덮여 있다', (env) => {
   // 도움말은 SHORTCUTS 상수에서 렌더되므로 "적혀 있다"는 것만으로는 배선을 보장하지
   // 않는다. 새 항목을 문서에만 추가하고 배선이나 테스트를 빼먹으면 도움말이 조용히
@@ -1038,30 +1157,209 @@ test('접근성: 필터 컨트롤에 aria 상태가 있다', (env) => {
 });
 
 /* ================================================================== *
+ * 공개 티저 페이지 (docs/index.html)
+ * ================================================================== *
+ *
+ * 이 페이지는 GitHub Pages 로 공개되는 유일한 산출물이고, 이 사업의 검증 장치다
+ * (액세스 요청 이슈 수가 수요 지표). 그런데 검증이 전혀 없었다. 내부 리포트가
+ * 깨지면 운영자만 불편하지만, 이쪽이 깨지면 측정 자체가 멈춘다.
+ */
+
+let publicHtml = '';
+
+async function makePublicEnv(): Promise<Env> {
+  const vc = new VirtualConsole();
+  vc.on('jsdomError', (err: unknown) => {
+    failures.push({
+      test: currentTest,
+      message: `jsdom 스크립트 오류: ${(err as Error)?.message ?? String(err)}`,
+    });
+  });
+
+  const dom = new JSDOM(publicHtml, {
+    url: 'https://xiangbaej.github.io/hiresignal/',
+    runScripts: 'dangerously',
+    virtualConsole: vc,
+  });
+  const win = dom.window;
+  const doc = win.document;
+  const shown = (el: any): boolean => {
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      if (n.hasAttribute('hidden')) return false;
+    }
+    return true;
+  };
+  const env: Env = {
+    win,
+    doc,
+    shown,
+    allGroups: () => [],
+    allLeads: () => Array.from(doc.querySelectorAll('.card')),
+    visibleGroups: () => [],
+    visibleLeads: () =>
+      Array.from(doc.querySelectorAll('.card')).filter((el: any) => shown(el)),
+    byId: (id: string) => doc.getElementById(id),
+    click: (el: any) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true })),
+    key: () => {},
+    type: async () => {},
+    hash: () => win.location.hash,
+    countText: () => '',
+    settle: () => new Promise<void>((r) => win.setTimeout(r, 20)),
+  };
+  return env;
+}
+
+const publicTests: Array<[string, (env: Env) => Promise<void> | void]> = [];
+function publicTest(name: string, fn: (env: Env) => Promise<void> | void): void {
+  publicTests.push([name, fn]);
+}
+
+publicTest('티저 카드가 렌더된다', (env) => {
+  const cards = env.visibleLeads();
+  assertEqual(cards.length, 20, '무료 공개분은 20건');
+  for (const c of cards) {
+    assert(!!c.querySelector('.company'), '회사명이 있다');
+    assert(!!c.querySelector('.title a'), '원문 링크가 걸린 제목이 있다');
+    assert(!!c.querySelector('.why'), '판단 근거가 붙어 있다');
+  }
+});
+
+publicTest('영어 페이지에 한국어가 새지 않는다', (env) => {
+  // 실제로 있었던 결함이다. 내부 리포트와 카드 렌더 코드를 공유하므로 한국어 라벨이
+  // 새기 쉽다. 사용자에게 보이는 텍스트만 본다 - 주석은 소스에 남아도 무해하다.
+  const hangul = /[가-힣]/;
+  const offenders: string[] = [];
+
+  const walk = (node: any) => {
+    for (const child of Array.from(node.childNodes) as any[]) {
+      if (child.nodeType === 3) {
+        const t = String(child.textContent).trim();
+        if (t && hangul.test(t)) offenders.push(t.slice(0, 60));
+      } else if (child.nodeType === 1 && child.tagName !== 'SCRIPT' && child.tagName !== 'STYLE') {
+        walk(child);
+      }
+    }
+  };
+  walk(env.doc.body);
+
+  // 속성으로 노출되는 텍스트도 본다 (title / placeholder / aria-label / alt)
+  for (const el of Array.from(env.doc.querySelectorAll('*')) as any[]) {
+    for (const attr of ['title', 'placeholder', 'aria-label', 'alt']) {
+      const v = el.getAttribute(attr);
+      if (v && hangul.test(v)) offenders.push(`[${attr}] ${v.slice(0, 60)}`);
+    }
+  }
+
+  assertEqual(
+    offenders.length,
+    0,
+    `한국어 노출 ${offenders.length}건: ${offenders.slice(0, 3).join(' / ')}`,
+  );
+  assertEqual(env.doc.documentElement.getAttribute('lang'), 'en', 'lang 은 en');
+});
+
+publicTest('액세스 요청이 GitHub 이슈 URL 을 만든다', (env) => {
+  // 폼 백엔드가 없어 이슈로 보낸다. 이 경로가 막히면 수요 측정이 멈춘다.
+  let opened: any = null;
+  env.win.open = (url: string) => {
+    opened = url;
+    return null;
+  };
+
+  const form = env.byId('lead-form');
+  assert(!!form, '요청 폼이 있다');
+
+  // 스택이 비면 아무 일도 없어야 한다 (빈 이슈를 만들면 지표가 오염된다)
+  env.byId('stacks').value = '';
+  form.dispatchEvent(new env.win.Event('submit', { bubbles: true, cancelable: true }));
+  assertEqual(opened, null, '스택이 비면 이슈를 열지 않는다');
+
+  env.byId('stacks').value = 'kubernetes, terraform';
+  env.byId('email').value = 'me@example.com';
+  form.dispatchEvent(new env.win.Event('submit', { bubbles: true, cancelable: true }));
+
+  assert(!!opened, '이슈 URL 을 연다');
+  assert(String(opened).startsWith('https://github.com/'), `github.com 으로 간다: ${opened}`);
+  assert(String(opened).includes('/issues/new'), '새 이슈 경로');
+  const decoded = decodeURIComponent(String(opened));
+  assert(decoded.includes('kubernetes, terraform'), '입력한 스택이 담긴다');
+  assert(decoded.includes('me@example.com'), '입력한 이메일이 담긴다');
+
+  // 이메일은 선택 사항이다. 공개 이슈라 넣지 않으면 넣지 않아야 한다.
+  opened = null;
+  env.byId('email').value = '';
+  form.dispatchEvent(new env.win.Event('submit', { bubbles: true, cancelable: true }));
+  assert(!decodeURIComponent(String(opened)).includes('Preferred contact'),
+    '이메일을 비우면 연락처 절이 빠진다');
+});
+
+publicTest('외부 링크가 안전 속성을 갖고 원문으로 나간다', (env) => {
+  const links = Array.from(env.doc.querySelectorAll('a[target="_blank"]')) as any[];
+  assert(links.length > 0, '외부 링크가 있다');
+  const unsafe = links.filter((a) => {
+    const rel = a.getAttribute('rel') || '';
+    return !rel.includes('noopener') || !rel.includes('noreferrer');
+  });
+  assertEqual(unsafe.length, 0, `rel 누락 ${unsafe.length}건`);
+
+  const bad = links.filter((a) => !/^https?:/.test(a.getAttribute('href') || ''));
+  assertEqual(bad.length, 0, `http(s) 아닌 링크 ${bad.length}건`);
+});
+
+publicTest('공고 본문을 재배포하지 않는다', (env) => {
+  // 데이터 취급 원칙이다. 제목·회사·URL·파생 태그만 담고 본문은 담지 않는다.
+  // 카드 텍스트가 길어지면 본문이 섞여 들어갔다는 신호다.
+  for (const card of env.visibleLeads()) {
+    const text = String(card.textContent).replace(/\s+/g, ' ').trim();
+    assert(
+      text.length < 1200,
+      `카드 텍스트가 과하게 길다(${text.length}자) — 본문이 섞였을 수 있다`,
+    );
+  }
+});
+
+publicTest('다크 모드 토큰이 공개 페이지에도 있다', (env) => {
+  const css = (Array.from(env.doc.querySelectorAll('style')) as any[])
+    .map((el) => el.textContent)
+    .join('\n');
+  assert(css.includes('@media (prefers-color-scheme: dark)'), '다크 모드 블록이 있다');
+  for (const tok of ['--on-primary', '--line-strong']) {
+    assert(css.includes(tok), `${tok} 토큰이 정의돼 있다`);
+  }
+});
+
+/* ================================================================== *
  * 실행
  * ================================================================== */
 
-async function main(): Promise<void> {
-  html = await readFile(REPORT, 'utf8');
-  console.log(`대상: data/report.html (${(html.length / 1024).toFixed(0)} KB)`);
-  console.log('');
-
-  for (const [name, fn] of tests) {
+/** 케이스 목록을 돌린다. 각 케이스는 새 문서에서 시작한다. */
+async function runSuite(
+  label: string,
+  list: Array<[string, (env: Env) => Promise<void> | void]>,
+  factory: () => Promise<Env>,
+  isolateStorage: boolean,
+): Promise<void> {
+  console.log(label);
+  for (const [name, fn] of list) {
     currentTest = name;
     const before = failures.length;
     let env: Env | null = null;
     try {
-      env = await makeEnv();
-      // 테스트 간 격리. localStorage 는 오리진 단위로 공유되므로 문서를 만든 직후
-      // 비우고, 스크립트가 이미 읽은 상태를 지우기 위해 다시 만든다.
-      env.win.localStorage.clear();
-      env.win.close();
-      env = await makeEnv();
+      env = await factory();
+      if (isolateStorage) {
+        // 테스트 간 격리. localStorage 는 오리진 단위로 공유되므로 문서를 만든 직후
+        // 비우고, 스크립트가 이미 읽은 상태를 지우기 위해 다시 만든다.
+        env.win.localStorage.clear();
+        env.win.close();
+        env = await factory();
+      }
       await fn(env);
     } catch (err) {
       failures.push({ test: name, message: `예외: ${(err as Error).message}` });
     } finally {
-      try { env?.win.localStorage.clear(); } catch {}
+      if (isolateStorage) {
+        try { env?.win.localStorage.clear(); } catch {}
+      }
       try { env?.win.close(); } catch {}
     }
     const failed = failures.length - before;
@@ -1080,10 +1378,25 @@ async function main(): Promise<void> {
       }
     }
   }
-
   console.log('');
+}
+
+async function main(): Promise<void> {
+  html = await readFile(REPORT, 'utf8');
+  publicHtml = await readFile(PUBLIC, 'utf8');
+
+  const kb = (s: string) => (s.length / 1024).toFixed(0);
   console.log(
-    `${passedTests}/${tests.length} 테스트 통과 · 단정 ${assertions}개` +
+    `대상: data/report.html (${kb(html)} KB) · docs/index.html (${kb(publicHtml)} KB)`,
+  );
+  console.log('');
+
+  await runSuite('[내부 리포트]', tests, () => makeEnv(), true);
+  await runSuite('[공개 티저]', publicTests, makePublicEnv, false);
+
+  const totalTests = tests.length + publicTests.length;
+  console.log(
+    `${passedTests}/${totalTests} 테스트 통과 · 단정 ${assertions}개` +
       (failures.length ? ` · 실패 ${failures.length}건` : ''),
   );
   if (failures.length > 0) process.exitCode = 1;
