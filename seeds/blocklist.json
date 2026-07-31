@@ -1,0 +1,19 @@
+{
+  "_purpose": "제외 목록. 여기 있는 보드/회사는 수집·리드 산출 대상에서 완전히 배제된다.",
+  "_why": "이 프로젝트는 ATS가 자사 채용 페이지 구축용으로 제공하는 공개 API를 제3자 관점으로 집계한다. 명문 금지는 없지만 의도된 용법도 아니다. 그래서 '빼 달라'는 요청에 즉시 응할 수 있는 경로를 코드 레벨로 갖춘다. 문서에만 적어두면 실효가 없다.",
+  "_how_to_request": "https://github.com/xiangbaej/hiresignal/issues 에 회사명 또는 채용 보드 URL과 함께 이슈를 열어 주세요. 확인 후 이 파일에 추가하며, 다음 스캔에서 기존 관측까지 정리됩니다.",
+  "_enforcement": [
+    "discover-boards.ts — 발굴 단계에서 시드 승격을 차단",
+    "scan.ts — 시드에 남아 있어도 스캔 대상에서 제외하고, pruneBoards가 누적 관측을 삭제",
+    "따라서 제외 요청 후 다음 실행에서 데이터가 실제로 사라진다"
+  ],
+
+  "boards": [],
+
+  "companies": [],
+
+  "_format": {
+    "boards": "\"ats:slug\" 형식. 특정 ATS 보드만 제외. 예: \"ashby:example\"",
+    "companies": "슬러그만. 해당 슬러그를 모든 ATS에서 제외. 예: \"example\""
+  }
+}

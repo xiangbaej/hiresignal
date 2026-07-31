@@ -32,6 +32,7 @@ import {
 } from '../lib/signals/stack.js';
 import { isDemoBoard } from '../lib/signals/evergreen.js';
 import { classifyRole } from '../lib/signals/role.js';
+import { isBlocked, loadBlocklist } from '../lib/blocklist.js';
 import { FileSnapshotStore } from '../lib/store/file-store.js';
 import { ArchiveCache } from '../lib/store/archive-cache.js';
 import { jobKeyString, type ScanRunRecord } from '../lib/store/types.js';
@@ -51,12 +52,29 @@ interface SeedCompany {
   displayName?: string;
 }
 
-async function loadSeeds(): Promise<SeedCompany[]> {
+async function loadSeeds(): Promise<{
+  seeds: SeedCompany[];
+  blockedCount: number;
+}> {
   const raw = await readFile(path.join(ROOT, 'seeds/companies.json'), 'utf8');
   const parsed = JSON.parse(raw) as { companies: SeedCompany[] };
-  return parsed.companies.filter(
+  const blocklist = await loadBlocklist();
+
+  const eligible = parsed.companies.filter(
     (c) => isAtsProvider(c.atsProvider) && !isDemoBoard(c.slug),
   );
+
+  // 제외 목록을 여기서 적용하는 것이 중요하다.
+  //
+  // 제외된 보드는 활성 보드 목록에서 빠지므로, 뒤이어 실행되는 pruneBoards가
+  // 그 회사의 누적 관측까지 삭제한다. 즉 "빼 달라"는 요청이 다음 실행에서
+  // 실제 데이터 삭제로 이어진다. 수집만 멈추고 과거 데이터를 남기면 요청에
+  // 응한 것이 아니다.
+  const seeds = eligible.filter(
+    (c) => !isBlocked(blocklist, c.atsProvider, c.slug),
+  );
+
+  return { seeds, blockedCount: eligible.length - seeds.length };
 }
 
 /** 보드 내 태그 계산 + 보드 전역 태그 제외 후 클러스터 크기 산출 */
@@ -109,7 +127,7 @@ async function main() {
   const forcePrune = argv.includes('--force-prune');
   const exportLeads = argv.includes('--export');
 
-  const seeds = await loadSeeds();
+  const { seeds, blockedCount } = await loadSeeds();
   const store = new FileSnapshotStore(DATA_DIR);
   await store.load();
 
@@ -119,7 +137,11 @@ async function main() {
   console.log(
     `\nHireSignal 일일 스캔 — ${seeds.length}개 보드${dryRun ? ' (DRY RUN)' : ''}\n` +
       `이전 스캔: ${store.lastScanAt ?? '없음 (첫 실행)'}\n` +
-      `누적 관측 공고: ${store.observationCount}건\n`,
+      `누적 관측 공고: ${store.observationCount}건` +
+      (blockedCount > 0
+        ? `\n제외 목록 적용: ${blockedCount}개 보드 (누적 관측도 정리됩니다)`
+        : '') +
+      '\n',
   );
 
   // 시드에서 빠진 보드의 관측을 먼저 정리한다. 방치하면 추적하지도 않는 회사의

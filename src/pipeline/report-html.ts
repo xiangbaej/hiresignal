@@ -549,6 +549,15 @@ function renderPublicHtml(data: LeadsFile): string {
     </li>
   </ul>
 
+  <h2>채용 담당자시라면</h2>
+  <p>
+    귀사 공고를 이 목록에서 제외해 드립니다.
+    <a href="${REPO_URL}/issues/new?title=${encodeURIComponent('Opt-out request')}" target="_blank" rel="noopener noreferrer">이슈를 열어</a>
+    회사명 또는 채용 보드 URL을 알려주시면 <code>seeds/blocklist.json</code>에 추가되고,
+    다음 실행에서 <strong>누적된 관측 데이터까지 삭제</strong>됩니다.
+    수집 중단만 하고 과거 데이터를 남기지 않습니다.
+  </p>
+
   <footer>
     소스와 방법론 전체 공개 · <a href="${REPO_URL}" target="_blank" rel="noopener noreferrer">github.com/xiangbaej/hiresignal</a><br>
     공고 본문은 재배포하지 않습니다. 모든 링크는 원문으로 연결됩니다.

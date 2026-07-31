@@ -27,6 +27,7 @@ import path from 'node:path';
 import { mapWithConcurrency } from '../lib/ats/http.js';
 import { allConnectors } from '../lib/ats/registry.js';
 import { isDemoBoard } from '../lib/signals/evergreen.js';
+import { isBlocked, loadBlocklist, type Blocklist } from '../lib/blocklist.js';
 import { AtsFetchError, type AtsProvider } from '../lib/ats/types.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -68,7 +69,10 @@ interface CandidateResult {
   misses: number;
 }
 
-async function probeCandidate(candidate: string): Promise<CandidateResult> {
+async function probeCandidate(
+  candidate: string,
+  blocklist: Blocklist,
+): Promise<CandidateResult> {
   const hits: ProbeHit[] = [];
   let misses = 0;
 
@@ -83,6 +87,13 @@ async function probeCandidate(candidate: string): Promise<CandidateResult> {
 
       // 빈 배열은 "슬러그 없음"과 구별할 수 없다. 미스로 처리한다.
       if (result.jobs.length === 0) {
+        misses++;
+        continue;
+      }
+
+      // 보드 단위 제외(`ats:slug`)는 프로브 후에 판정한다. 후보 이름만으로는
+      // 어느 ATS에 있을지 모르기 때문이다.
+      if (isBlocked(blocklist, connector.provider, candidate)) {
         misses++;
         continue;
       }
@@ -122,9 +133,14 @@ async function main() {
   const write = process.argv.includes('--write');
 
   const raw = await readFile(path.join(ROOT, 'seeds/candidates.json'), 'utf8');
+  const blocklist = await loadBlocklist();
+
   const candidates = (JSON.parse(raw) as { candidates: string[] }).candidates
     .map((c) => c.trim().toLowerCase())
-    .filter((c) => c.length > 0 && !isDemoBoard(c));
+    .filter((c) => c.length > 0 && !isDemoBoard(c))
+    // 제외 요청한 회사는 후보 단계에서 아예 프로브하지 않는다.
+    // scan.ts에서도 이중으로 막지만, 여기서 걸러야 불필요한 요청도 보내지 않는다.
+    .filter((c) => !blocklist.companies.has(c));
 
   const unique = [...new Set(candidates)];
 
@@ -136,7 +152,9 @@ async function main() {
   const startedAt = Date.now();
   // 후보 단위 동시성. 후보 하나가 내부에서 ATS 4개를 순차 호출하므로
   // 실제 동시 요청은 이 값과 같다.
-  const outcomes = await mapWithConcurrency(unique, 6, probeCandidate);
+  const outcomes = await mapWithConcurrency(unique, 6, (candidate) =>
+    probeCandidate(candidate, blocklist),
+  );
 
   const allHits: ProbeHit[] = [];
   let notFound = 0;
