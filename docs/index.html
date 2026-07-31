@@ -19,16 +19,42 @@
     --primary: #3182f6;
     --primary-dark: #1b64da;
     --primary-weak: #e8f3ff;
+    --primary-weak2: #d8ebff;
     --hot: #f04452;
     --hot-weak: #ffeceb;
     --warn: #ff9500;
     --warn-weak: #fff4e6;
     --warn-fg: #b26a00;
+    /* 경계선·칩·호버. 하드코딩된 hex 를 토큰으로 뺀 이유는 다크 모드에서
+       이 값들만 갈아끼우면 되게 하려는 것이다. */
+    --line: #eef1f4;
+    --hover: #e8ebee;
+    --chip-bg: #fafbfc;
+    --chip-line: #e3e7ec;
+    --dup-bg: #fdecea;
+    --dup-fg: #b3261e;
+    /* 솔리드 배경 위에 얹는 글자색.
+       흰색을 직접 쓰면 다크 모드에서 --fg / --primary / --hot 이 밝아질 때
+       밝은 배경에 흰 글자가 되어 읽히지 않는다. 배경별로 토큰을 나눠 둔다. */
+    --on-fg: #ffffff;
+    --on-primary: #ffffff;
+    --on-hot: #ffffff;
     --radius: 20px;
     --shadow: 0 1px 2px rgba(0, 27, 55, .04), 0 6px 20px rgba(0, 27, 55, .05);
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
+
+  /*
+   * hidden 속성을 저자 스타일보다 우선시킨다.
+   *
+   * 왜 !important 인가: 저자 스타일은 명시도와 무관하게 UA 스타일을 항상 이긴다.
+   * .feed 가 display:grid 를 지정하는 순간 UA 의 [hidden]{display:none} 이 무력해져
+   * 숨긴 피드가 그대로 렌더링된다. 실제로 이 결함으로 회사 카드 98개와 공고 카드
+   * 457개가 동시에 한 열에 쌓여 있었다. display 를 지정하는 요소에 hidden 을 쓰는
+   * 조합은 앞으로도 생기므로 개별 규칙이 아니라 여기서 한 번에 막는다.
+   */
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--bg); color: var(--fg);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
@@ -49,7 +75,7 @@
     font-size: 11px; font-weight: 800; text-transform: uppercase;
     letter-spacing: .04em; padding: 4px 9px; border-radius: 6px;
   }
-  .grade-hot { background: var(--hot); color: #fff; }
+  .grade-hot { background: var(--hot); color: var(--on-hot); }
   .grade-warm { background: var(--warn-weak); color: var(--warn-fg); }
   .company { font-size: 15px; font-weight: 600; color: var(--fg2); margin-bottom: 2px; }
   .title {
@@ -83,6 +109,7 @@
   }
   .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
   .card-top .grade { margin-left: auto; }
+  .why summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
   .section { padding: 64px 0; }
