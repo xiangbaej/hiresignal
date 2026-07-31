@@ -235,7 +235,9 @@ function groupByCompany(leads: Lead[]): CompanyGroup[] {
     const titleBlob = g.roles
       .map((r) => `${r.title} ${r.seats.map((s) => s.region ?? '').join(' ')}`)
       .join(' ');
-    g.searchBlob = `${g.company} ${titleBlob} ${g.tags.join(' ')}`
+    // 보드 문자열도 넣는다. 카드에 `greenhouse:cresta` 가 보이는데 그걸로 검색하면
+    // 결과가 없는 것은 화면과 검색이 어긋난 것이다.
+    g.searchBlob = `${g.company} ${g.board} ${titleBlob} ${g.tags.join(' ')}`
       .replace(/\s+/g, ' ')
       .toLowerCase();
   }
@@ -803,7 +805,7 @@ function renderCard(lead: Lead, index: number): string {
   // 초안도 관측 신호만으로 구성된다.
   return `
 <article class="card" data-group="${esc(group)}" data-grade="${esc(lead.grade)}"
-         data-search="${esc(`${lead.company} ${lead.title} ${lead.tags.join(' ')}`.toLowerCase())}"
+         data-search="${esc(`${lead.company} ${lead.board} ${lead.title} ${lead.tags.join(' ')}`.toLowerCase())}"
          data-company="${esc(lead.company)}" data-title="${esc(lead.title)}"
          data-key="${esc(lead.board || lead.company)}"
          data-age="${esc(lead.ageDays ?? 0)}" data-rel="${lead.rel}"
@@ -838,8 +840,12 @@ function renderCard(lead: Lead, index: number): string {
  * 때 도움말이 조용히 거짓말을 하게 된다.
  */
 const SHORTCUTS: ReadonlyArray<readonly [string, string]> = [
+  ['j', '다음 카드'],
+  ['k', '이전 카드'],
+  ['d', '선택 카드의 초안 열기'],
+  ['m', '선택 카드를 연락함으로 표시'],
   ['/', '검색으로 이동'],
-  ['Esc', '검색어 지우기 · 도움말 닫기'],
+  ['Esc', '초안 닫기 · 검색어 지우기 · 도움말 닫기'],
   ['1‒9', '직군 탭 선택'],
   ['0', '전체 탭'],
   ['v', '회사별 / 공고별 전환'],
@@ -1074,6 +1080,21 @@ ${DESIGN_TOKENS}
   }
   .help-row kbd { flex: 0 0 auto; margin-left: 0; min-width: 30px; text-align: center; }
   .help-note { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; max-width: 74ch; }
+  .count-actions { display: flex; align-items: center; gap: 14px; }
+
+  /* 연락 이력 백업. 손으로 쌓은 기록이라 브라우저에 갇혀 있으면 안 된다. */
+  .help-io { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .help-io > strong { font-size: 13px; }
+  .help-io textarea {
+    width: 100%; margin-top: 10px; border: 1px solid var(--chip-line); border-radius: 10px;
+    padding: 10px 12px; resize: vertical; color: var(--fg); background: var(--chip-bg);
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .help-io textarea:focus { outline: 2px solid var(--primary); }
+  .help-io-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .help-io-msg { font-size: 12.5px; color: var(--muted); }
+  .help-io-msg[data-tone="bad"] { color: var(--hot); font-weight: 700; }
+  .help-io-msg[data-tone="good"] { color: var(--primary); font-weight: 700; }
 
   /*
    * 반응형 그리드. auto-fill + minmax 로 폭에 따라 열 수가 정해진다.
@@ -1117,6 +1138,12 @@ ${DESIGN_TOKENS}
      정보이고, 되돌리려면 카드가 보여야 한다. */
   .is-contacted { opacity: .55; }
   .is-contacted:hover, .is-contacted:focus-within { opacity: 1; }
+
+  /* j/k 로 선택한 카드. 브라우저 기본 포커스 링은 프로그램적 포커스에서 잘 안
+     나타나므로 명시적으로 표시한다. outline 을 쓰면 그리드 간격을 먹지 않는다. */
+  .is-focused { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .is-focused.is-contacted { opacity: 1; }
+  article:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
   .btn-primary {
     border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700;
     color: var(--on-primary); background: var(--primary); border-radius: 12px;
@@ -1234,7 +1261,11 @@ ${DESIGN_TOKENS}
   }
   .drop-samples li { margin-top: 3px; }
 
-  .empty { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 14px; }
+  .empty {
+    text-align: center; color: var(--muted); padding: 60px 20px; font-size: 14px;
+    grid-column: 1 / -1;
+  }
+  .empty .btn-ghost { margin-top: 14px; }
   .note {
     margin-top: 20px; background: var(--card); border-radius: var(--radius);
     box-shadow: var(--shadow); padding: 20px 22px; font-size: 13px; color: var(--fg2);
@@ -1318,22 +1349,45 @@ ${DESIGN_TOKENS}
 
   <div class="count-row">
     <p class="result-count" id="count" role="status" aria-live="polite"></p>
-    <button type="button" class="help-btn" id="help-btn" aria-expanded="false" aria-controls="help">
-      단축키 <kbd>?</kbd>
-    </button>
+    <div class="count-actions">
+      <button type="button" class="help-btn" id="reset-btn" hidden>필터 초기화</button>
+      <button type="button" class="help-btn" id="help-btn" aria-expanded="false" aria-controls="help">
+        단축키 <kbd>?</kbd>
+      </button>
+    </div>
   </div>
 
   <div class="help" id="help" hidden>
     <div class="help-grid">${SHORTCUT_ROWS}</div>
     <p class="help-note">
       필터 상태는 주소에 저장됩니다 &mdash; 새로고침해도 유지되고, 그 주소를 그대로
-      북마크하거나 공유할 수 있습니다. 연락 표시는 이 브라우저에만 저장됩니다.
+      북마크하거나 공유할 수 있습니다.
     </p>
+
+    <div class="help-io">
+      <strong>연락 이력 백업</strong>
+      <p class="help-note">
+        연락 표시는 이 브라우저에만 저장됩니다. 손으로 쌓은 기록이라 잃으면 되살릴 수
+        없으니, 브라우저를 비우거나 기기를 옮기기 전에 아래 JSON 을 보관하세요.
+      </p>
+      <textarea id="io" rows="3" spellcheck="false"
+                aria-label="연락 이력 JSON"
+                placeholder='{"greenhouse:cresta":"2026-07-31"}'></textarea>
+      <div class="help-io-row">
+        <button type="button" class="btn-ghost" id="io-dump">현재 이력 담기</button>
+        <button type="button" class="btn-ghost" id="io-apply">붙여넣은 이력 적용</button>
+        <span class="help-io-msg" id="io-msg" role="status" aria-live="polite"></span>
+      </div>
+    </div>
   </div>
 
   <div class="feed" id="groups">${groupCards}</div>
   <div class="feed" id="feed" hidden>${cards}</div>
-  <div class="empty" id="empty" hidden>조건에 맞는 리드가 없습니다.</div>
+  <div class="empty" id="empty" hidden>
+    조건에 맞는 리드가 없습니다.
+    <br>
+    <button type="button" class="btn-ghost" id="empty-reset">필터 초기화</button>
+  </div>
 
   <details class="audit">
     <summary>직군 필터가 제외한 ${s.droppedByRole}건 감사</summary>
@@ -1380,7 +1434,11 @@ ${DESIGN_TOKENS}
   var leadCards = Array.prototype.slice.call(leadFeed.querySelectorAll('.card'));
   var groupCards = Array.prototype.slice.call(groupFeed.querySelectorAll('.group-card'));
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
-  var segs = Array.prototype.slice.call(document.querySelectorAll('.seg-btn'));
+  /* 보기 전환 버튼만 담는다.
+     ".seg-btn" 전체를 잡으면 안 된다 — Hot만·미연락만 버튼도 같은 클래스를 쓰는데,
+     setView 가 segs 전부의 aria-pressed 를 data-view 기준으로 덮으므로 보기를
+     전환할 때마다 그 두 필터가 조용히 꺼진다. 실제로 그 결함이 있었다. */
+  var segs = Array.prototype.slice.call(document.querySelectorAll('.seg-btn[data-view]'));
   var q = document.getElementById('q');
   var sortSel = document.getElementById('sort');
   var empty = document.getElementById('empty');
@@ -1390,6 +1448,9 @@ ${DESIGN_TOKENS}
   var onlyTodo = document.getElementById('only-todo');
   var help = document.getElementById('help');
   var helpBtn = document.getElementById('help-btn');
+  var resetBtn = document.getElementById('reset-btn');
+  var io = document.getElementById('io');
+  var ioMsg = document.getElementById('io-msg');
 
   var activeTab = 'all';
   var view = 'company';
@@ -1420,7 +1481,17 @@ ${DESIGN_TOKENS}
         : '<span aria-hidden="true">&#9633;</span> 연락함';
     }
   }
-  groupCards.forEach(paintContacted);
+
+  /* 공고 카드까지 함께 칠한다.
+     연락 표시는 회사 단위로만 남기지만, 공고별 보기에서 그 사실이 안 보이면
+     같은 회사에 또 연락하게 된다 - 표시를 만든 이유가 그것이다. 공고 카드에는
+     버튼을 두지 않는다(회사 단위 결정을 공고에서 뒤집으면 어느 쪽이 참인지
+     알 수 없다). 옅게 내리는 것까지만 한다. */
+  function repaintContacted() {
+    groupCards.forEach(paintContacted);
+    leadCards.forEach(paintContacted);
+  }
+  repaintContacted();
 
   function matchesTab(el) {
     if (activeTab === 'all') return true;
@@ -1462,7 +1533,28 @@ ${DESIGN_TOKENS}
     count.textContent = shown + unit + ' (전체 ' + totalN + ')' +
       (marked > 0 ? ' · 연락함 ' + marked + '곳' : '');
 
+    /* 필터가 걸려 있을 때만 초기화 버튼을 보인다. 항상 띄우면 누를 이유가 없는
+       버튼이 상시로 자리를 차지하고, 결과가 0 일 때 원인을 찾는 단서도 못 된다. */
+    resetBtn.hidden = !isFiltered();
+
+    dropFocusIfHidden();
     writeHash();
+  }
+
+  /* 기본 상태에서 벗어났는가. 정렬은 결과 집합을 바꾸지 않으므로 세지 않는다. */
+  function isFiltered() {
+    return activeTab !== 'all' ||
+      q.value.trim() !== '' ||
+      onlyHot.getAttribute('aria-pressed') === 'true' ||
+      onlyTodo.getAttribute('aria-pressed') === 'true';
+  }
+
+  function resetFilters() {
+    selectTab('all');
+    q.value = '';
+    setPressed(onlyHot, false);
+    setPressed(onlyTodo, false);
+    apply();
   }
 
   function num(el, attr) { return Number(el.getAttribute(attr) || 0); }
@@ -1569,9 +1661,7 @@ ${DESIGN_TOKENS}
     });
   });
   segs.forEach(function (s) {
-    var v = s.getAttribute('data-view');
-    if (!v) return; /* Hot만·미연락만 버튼은 아래에서 따로 배선한다 */
-    s.addEventListener('click', function () { setView(v); });
+    s.addEventListener('click', function () { setView(s.getAttribute('data-view')); });
   });
 
   [onlyHot, onlyTodo].forEach(function (btn) {
@@ -1590,7 +1680,7 @@ ${DESIGN_TOKENS}
     if (contacted[key]) delete contacted[key];
     else contacted[key] = new Date().toISOString().slice(0, 10);
     saveContacted();
-    paintContacted(card);
+    repaintContacted();
     apply();
   });
   /* 정렬은 화면만 바꾸므로 apply() 를 부르지 않는다. 대신 상태 저장은 해야 한다 —
@@ -1637,6 +1727,114 @@ ${DESIGN_TOKENS}
     if (helpBtn) helpBtn.setAttribute('aria-expanded', next ? 'true' : 'false');
   }
   if (helpBtn) helpBtn.addEventListener('click', function () { toggleHelp(); });
+  resetBtn.addEventListener('click', resetFilters);
+  document.getElementById('empty-reset').addEventListener('click', resetFilters);
+
+  /* ── 연락 이력 백업 ──
+     손으로 쌓은 기록이 브라우저 하나에 갇혀 있으면 캐시를 비우는 순간 사라진다.
+     서버가 없으니 JSON 을 사람이 옮기는 것이 유일한 경로다. */
+  function ioSay(text, tone) {
+    ioMsg.textContent = text;
+    if (tone) ioMsg.setAttribute('data-tone', tone);
+    else ioMsg.removeAttribute('data-tone');
+  }
+
+  document.getElementById('io-dump').addEventListener('click', function () {
+    io.value = JSON.stringify(contacted);
+    io.focus();
+    io.select();
+    var n = Object.keys(contacted).length;
+    ioSay(n + '곳을 담았습니다. 복사해 보관하세요.', 'good');
+  });
+
+  document.getElementById('io-apply').addEventListener('click', function () {
+    var raw = io.value.trim();
+    if (!raw) { ioSay('붙여넣을 JSON 이 비어 있습니다.', 'bad'); return; }
+
+    var parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      ioSay('JSON 형식이 아닙니다. 담아둔 내용을 그대로 붙여넣으세요.', 'bad');
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      ioSay('회사키:날짜 형태의 객체여야 합니다.', 'bad');
+      return;
+    }
+
+    /* 덮어쓰지 않고 합친다. 지금 기기에서 표시한 것을 가져오기가 날려 버리면
+       복구할 수 없다 - 이력은 사후에 메울 수 없는 손 기록이다. */
+    var added = 0;
+    var known = {};
+    groupCards.forEach(function (c) { known[c.getAttribute('data-key')] = 1; });
+    var unknown = 0;
+    for (var key in parsed) {
+      if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
+      if (!known[key]) { unknown++; continue; }
+      if (!contacted[key]) { contacted[key] = parsed[key] || '1'; added++; }
+    }
+
+    saveContacted();
+    repaintContacted();
+    apply();
+    ioSay(
+      added + '곳을 추가했습니다.' +
+        (unknown > 0 ? ' 현재 목록에 없는 ' + unknown + '곳은 건너뜁니다.' : ''),
+      'good',
+    );
+  });
+
+  /* ── 카드 이동 ──
+     이 도구의 하루 루프는 "훑고 → 하나 고르고 → 초안 열고 → 복사하고 → 연락함
+     표시"다. 고르는 단계만 마우스를 요구하면 나머지 단축키의 의미가 줄어든다.
+
+     실제 DOM 포커스를 옮긴다. 클래스만 칠하면 스크린리더가 따라오지 않고,
+     Enter 로 초안을 여는 것도 문서 전역 핸들러에 의존해야 한다. */
+  var focused = null;
+
+  /* DOM 을 다시 훑는다. leadCards/groupCards 배열을 쓰면 안 된다 — sortNow 가
+     DocumentFragment 로 카드를 재배치하므로 배열 순서와 화면 순서가 갈라지고,
+     그러면 j 가 "아래 카드"가 아니라 엉뚱한 위치로 튄다. 이동은 눈에 보이는
+     순서를 따라야 한다. */
+  function visibleCards() {
+    var container = view === 'lead' ? leadFeed : groupFeed;
+    var sel = view === 'lead' ? '.card' : '.group-card';
+    return Array.prototype.slice.call(container.querySelectorAll(sel))
+      .filter(function (el) { return !el.hidden; });
+  }
+
+  function focusCard(el) {
+    if (focused && focused !== el) focused.classList.remove('is-focused');
+    focused = el || null;
+    if (!focused) return;
+    focused.classList.add('is-focused');
+    focused.setAttribute('tabindex', '-1');
+    try { focused.focus(); } catch (err) {}
+    /* jsdom 에는 scrollIntoView 가 없다. 없다고 던지면 이동 자체가 죽는다. */
+    if (focused.scrollIntoView) {
+      focused.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function moveFocus(delta) {
+    var list = visibleCards();
+    if (list.length === 0) return;
+    var at = focused ? list.indexOf(focused) : -1;
+    var next = at === -1 ? (delta > 0 ? 0 : list.length - 1) : at + delta;
+    if (next < 0) next = 0;
+    if (next > list.length - 1) next = list.length - 1;
+    focusCard(list[next]);
+  }
+
+  /* 필터가 바뀌어 선택한 카드가 사라지면 선택을 놓는다. 보이지 않는 카드에
+     Enter 를 눌러 초안이 열리면 화면 어디에서도 그 초안을 볼 수 없다. */
+  function dropFocusIfHidden() {
+    if (focused && focused.hidden) {
+      focused.classList.remove('is-focused');
+      focused = null;
+    }
+  }
 
   function isTyping(el) {
     if (!el) return false;
@@ -1647,11 +1845,24 @@ ${DESIGN_TOKENS}
   document.addEventListener('keydown', function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-    /* Esc 는 입력 중에도 받는다. 검색을 비우고 빠져나오는 용도다. */
+    /* Esc 는 입력 중에도 받는다. 유일한 탈출구이기 때문이다. */
     if (e.key === 'Escape') {
+      /* 초안 안에 있으면 초안을 닫고 카드로 돌아온다.
+         초안을 열면 편집을 위해 포커스가 textarea 로 가는데, 그 상태에서는 문자
+         단축키가 전부 글자로 들어간다. Esc 가 없으면 키보드만으로는 초안을 닫지도
+         다음 카드로 넘어가지도 못한다. */
+      var active = document.activeElement;
+      var inDraft = active && active.closest ? active.closest('.draft') : null;
+      if (inDraft) {
+        var host = inDraft.closest('article');
+        var toggle = host && host.querySelector('[data-gdraft], [data-draft]');
+        if (toggle) toggle.click();
+        if (host) focusCard(host);
+        return;
+      }
       if (help && !help.hidden) { toggleHelp(false); return; }
       if (q.value) { q.value = ''; apply(); }
-      if (document.activeElement === q) q.blur();
+      if (active === q) q.blur();
       return;
     }
 
@@ -1659,6 +1870,23 @@ ${DESIGN_TOKENS}
 
     if (e.key === '/') { e.preventDefault(); q.focus(); q.select(); return; }
     if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+
+    if (e.key === 'j') { e.preventDefault(); moveFocus(1); return; }
+    if (e.key === 'k') { e.preventDefault(); moveFocus(-1); return; }
+    if (e.key === 'd' || e.key === 'Enter') {
+      if (!focused) { moveFocus(1); return; }
+      var draftBtn = focused.querySelector('[data-gdraft], [data-draft]');
+      if (draftBtn) { e.preventDefault(); draftBtn.click(); }
+      return;
+    }
+    if (e.key === 'm') {
+      /* 연락 표시는 회사 단위 결정이므로 회사 카드에만 버튼이 있다. */
+      if (!focused) return;
+      var markBtn = focused.querySelector('[data-mark]');
+      if (markBtn) markBtn.click();
+      return;
+    }
+
     if (e.key === 'v') { setView(view === 'company' ? 'lead' : 'company'); return; }
     if (e.key === 'h') { onlyHot.click(); return; }
     if (e.key === 'u') { onlyTodo.click(); return; }

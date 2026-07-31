@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "ledger:check": "tsx src/scripts/check-ledger.ts",
     "roles:audit": "tsx src/scripts/audit-role-merge.ts",
+    "ui:test": "tsx src/scripts/test-report-ui.ts",
     "connectors:try": "tsx src/scripts/try-connectors.ts",
     "boards:discover": "tsx src/scripts/discover-boards.ts",
     "enrich": "tsx src/pipeline/enrich-archive.ts",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "22.10.7",
+    "jsdom": "26.1.0",
     "tsx": "4.23.1",
     "typescript": "5.7.3"
   }
