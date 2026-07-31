@@ -92,19 +92,154 @@ interface CompanyGroup {
   tabGroups: Set<string>;
   tags: string[];
   searchBlob: string;
-  roles: Array<{
-    title: string;
-    jobUrl: string;
-    ageDays: number | null;
-    ageFromArchive: boolean;
-    grade: string;
-    tags: string[];
-  }>;
+  /** 서로 다른 직무 수. count(공고 수)보다 작으면 중복이 접힌 것이다. */
+  roleCount: number;
+  roles: RoleEntry[];
+}
+
+/** 접힌 직무 하나에 딸린 개별 공고 = "자리" */
+interface RoleSeat {
+  /**
+   * 공고 원문 제목. 지역을 뗀 base 와 별도로 들고 있는다.
+   *
+   * 자리가 하나뿐인 지역 변형(예: `... Backend (Bucharest)`)에서 base 만 쓰면
+   * 화면에서 지역이 사라져 원문과 다른 제목이 보인다. 접기는 중복을 줄이려는
+   * 것이고 원문을 바꾸려는 게 아니다.
+   */
+  title: string;
+  jobUrl: string;
+  ageDays: number | null;
+  ageFromArchive: boolean;
+  grade: string;
+  /** 지역 변형에서 떼어낸 지역 라벨. 제목이 완전히 같아서 묶인 경우 null. */
+  region: string | null;
+}
+
+/**
+ * 같은 직무로 묶인 자리들.
+ *
+ * ── 왜 접는가 ──
+ *
+ * cresta 의 `Infrastructure Engineer/SRE` 는 305일·157일·157일 세 건이 각각
+ * 올라와 있다. 세 줄로 나열하면 "직무가 세 개"로 읽히지만 실제로는 **한 직무에
+ * 자리가 세 개**다. 이 구분은 콜드메일 논지를 바꾼다 — 전자는 "여러 분야를
+ * 못 뽑는다", 후자는 "이 한 자리를 세 번 시도하고도 못 뽑았다"이고 후자가 훨씬
+ * 강한 근거다. 화면에서 흩어놓으면 그 사실이 보이지 않는다.
+ *
+ * 접어도 개별 공고 링크는 전부 남긴다. 근거를 확인할 수 없는 요약은 이 리포트에서
+ * 가치가 없다.
+ */
+interface RoleEntry {
+  /** 대표 제목. 지역 변형이면 지역을 뗀 본문. */
+  title: string;
+  /** 소속 자리 중 최장 경과일 */
+  maxAge: number | null;
+  /** 최장 경과일 자리의 아카이브 증거 유무 */
+  ageFromArchive: boolean;
+  grade: string;
+  tags: string[];
+  seats: RoleSeat[];
+}
+
+/**
+ * 지역 표현 어휘.
+ *
+ * 실측 데이터에 나타난 지역 접미사 + 흔한 지리 표현으로만 구성한다. 목록에 없는
+ * 접미사는 지역으로 보지 않으므로 묶이지 않는다.
+ */
+const REGION_WORDS = new Set([
+  // 광역
+  'americas', 'america', 'emea', 'apac', 'latam', 'anz', 'global', 'worldwide',
+  'na', 'eu', 'europe', 'european', 'union', 'international',
+  'north', 'south', 'east', 'west', 'central', 'nordics', 'benelux', 'dach',
+  // 국가
+  'us', 'usa', 'uk', 'ireland', 'germany', 'france', 'spain', 'portugal', 'poland',
+  'romania', 'netherlands', 'sweden', 'norway', 'denmark', 'finland', 'switzerland',
+  'italy', 'austria', 'belgium', 'czechia', 'bulgaria', 'hungary', 'greece', 'turkey',
+  'israel', 'canada', 'mexico', 'brazil', 'argentina', 'chile', 'colombia', 'india',
+  'japan', 'korea', 'singapore', 'australia', 'zealand', 'china', 'taiwan', 'philippines',
+  'indonesia', 'vietnam', 'thailand', 'malaysia', 'uae', 'egypt', 'nigeria', 'africa',
+  // 도시 (실측 등장분)
+  'bucharest', 'cluj', 'iasi', 'london', 'berlin', 'paris', 'madrid', 'lisbon',
+  'warsaw', 'dublin', 'amsterdam', 'stockholm', 'munich', 'zurich', 'tokyo',
+  'bangalore', 'bengaluru', 'sydney', 'melbourne', 'toronto', 'vancouver',
+  'francisco', 'seattle', 'austin', 'boston', 'chicago', 'denver', 'atlanta', 'nyc',
+  // 근무 형태 수식어
+  'remote', 'onsite', 'hybrid', 'based', 'only', 'region', 'timezone', 'timezones',
+]);
+
+/**
+ * 접미사가 지역 표현인지 판정한다. 모든 낱말이 어휘에 있어야 참이다.
+ *
+ * 한 낱말이라도 벗어나면 거짓으로 두는 이유: 오판의 비용이 비대칭이다. 지역을
+ * 놓치면 접히지 않은 채 보이고(현행 동작), 잘못 접으면 다른 직무가 하나로
+ * 합쳐져 정보가 사라진다.
+ */
+function isRegionLabel(raw: string): boolean {
+  const words = raw
+    .toLowerCase()
+    .split(/[\s/&,+()]+/)
+    .map((w) => w.replace(/[.]/g, ''))
+    .filter(Boolean);
+  if (words.length === 0 || words.length > 4) return false;
+  return words.every((w) => REGION_WORDS.has(w));
+}
+
+/**
+ * 제목을 "본문 + 지역"으로 분해한다.
+ *
+ * 접미사를 무조건 떼면 안 된다. 실측 예시로 scaleway 의
+ * `Software Engineer - Compute Marketplace` 와 `- Kubernetes Specialist` 는
+ * 완전히 다른 자리인데, 형태만 보면 ashby 의
+ * `Staff Design Engineer - Americas / Canada / EU`(같은 자리의 지역 변형)와
+ * 구분되지 않는다. 유일한 구분 기준이 "접미사가 지리 표현인가"라서 어휘 판정을 쓴다.
+ */
+function splitRegion(title: string): { base: string; region: string | null } {
+  const trimmed = title.trim();
+
+  // 1) 끝 괄호 형태: "... (Korea)", "... (UK/Europe)"
+  const paren = /^(.+?)\s*\(([^()]+)\)\s*$/.exec(trimmed);
+  if (paren) {
+    const [, head = '', suffix = ''] = paren;
+    if (head && isRegionLabel(suffix)) {
+      return { base: head.trim(), region: suffix.trim() };
+    }
+  }
+
+  // 2) 끝 대시 구절: "... - Americas", "... — EU"
+  const dash = /^(.+?)\s*[-\u2010-\u2015]\s*([^-\u2010-\u2015]+)$/.exec(trimmed);
+  if (dash) {
+    const [, head = '', suffix = ''] = dash;
+    if (head && isRegionLabel(suffix)) {
+      return { base: head.trim(), region: suffix.trim() };
+    }
+  }
+
+  return { base: trimmed, region: null };
+}
+
+/**
+ * 직무 묶음 키. 대소문자·공백·구두점 변형만 흡수한다.
+ *
+ * 낱말을 지우지는 않는다. 여기서 더 공격적으로 정규화하면 서로 다른 직무가
+ * 합쳐진다 — perplexity 의 `Member of Technical Staff (...)` 15건이 그 예로,
+ * 괄호 안이 전부 다른 직무다.
+ */
+function roleKey(base: string): string {
+  return base
+    .toLowerCase()
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/[(),.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** 리드를 회사 단위로 묶는다. 보드가 다르면 다른 회사로 취급한다. */
 function groupByCompany(leads: Lead[]): CompanyGroup[] {
   const map = new Map<string, CompanyGroup>();
+  // 회사별 직무 묶음. CompanyGroup 에 직접 담지 않는 이유는 정규화 키가 화면에
+  // 나갈 값이 아니기 때문이다.
+  const roleMaps = new Map<string, Map<string, RoleEntry>>();
 
   for (const lead of leads) {
     const key = lead.board || lead.company;
@@ -120,9 +255,11 @@ function groupByCompany(leads: Lead[]): CompanyGroup[] {
         tabGroups: new Set(),
         tags: [],
         searchBlob: '',
+        roleCount: 0,
         roles: [],
       };
       map.set(key, g);
+      roleMaps.set(key, new Map());
     }
 
     g.count++;
@@ -135,20 +272,59 @@ function groupByCompany(leads: Lead[]): CompanyGroup[] {
     for (const tag of lead.tags) {
       if (!g.tags.includes(tag)) g.tags.push(tag);
     }
-    g.roles.push({
+
+    // 같은 직무의 자리를 하나로 접는다. 지역만 다른 변형도 같은 직무로 본다.
+    const { base, region } = splitRegion(lead.title);
+    const roleMap = roleMaps.get(key)!;
+    const rk = roleKey(base);
+    let entry = roleMap.get(rk);
+    if (!entry) {
+      entry = {
+        title: base,
+        maxAge: null,
+        ageFromArchive: false,
+        grade: lead.grade,
+        tags: [],
+        seats: [],
+      };
+      roleMap.set(rk, entry);
+    }
+    entry.seats.push({
       title: lead.title,
       jobUrl: lead.jobUrl,
       ageDays: lead.ageDays,
       ageFromArchive: lead.ageFromArchive,
       grade: lead.grade,
-      tags: lead.tags,
+      region,
     });
+    // 대표값은 가장 오래 막힌 자리에서 가져온다. 그 자리가 제안의 근거가 된다.
+    if (lead.ageDays !== null && (entry.maxAge === null || lead.ageDays > entry.maxAge)) {
+      entry.maxAge = lead.ageDays;
+      entry.ageFromArchive = lead.ageFromArchive;
+      entry.grade = lead.grade;
+    }
+    for (const tag of lead.tags) {
+      if (!entry.tags.includes(tag)) entry.tags.push(tag);
+    }
   }
 
-  for (const g of map.values()) {
+  for (const [key, g] of map) {
+    g.roles = [...roleMaps.get(key)!.values()];
+    g.roleCount = g.roles.length;
+
     // 오래 막힌 자리를 먼저 보여준다. 제안 각도를 잡을 때 그게 시작점이다.
-    g.roles.sort((a, b) => (b.ageDays ?? -1) - (a.ageDays ?? -1));
-    g.searchBlob = `${g.company} ${g.roles.map((r) => r.title).join(' ')} ${g.tags.join(' ')}`
+    g.roles.sort((a, b) => (b.maxAge ?? -1) - (a.maxAge ?? -1));
+    for (const r of g.roles) {
+      r.seats.sort((a, b) => (b.ageDays ?? -1) - (a.ageDays ?? -1));
+    }
+
+    // 검색 대상에는 지역 라벨도 넣는다. 접기로 제목에서 지역이 빠졌으므로
+    // 넣지 않으면 "Canada" 검색이 조용히 실패한다.
+    const titleBlob = g.roles
+      .map((r) => `${r.title} ${r.seats.map((s) => s.region ?? '').join(' ')}`)
+      .join(' ');
+    g.searchBlob = `${g.company} ${titleBlob} ${g.tags.join(' ')}`
+      .replace(/\s+/g, ' ')
       .toLowerCase();
   }
 
@@ -507,29 +683,78 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
     .map((t) => `<span class="tag">${esc(t)}</span>`)
     .join('');
 
+  const ageCell = (days: number | null, archived: boolean) =>
+    days === null
+      ? '<span class="muted">—</span>'
+      : `${days}일${archived ? '&#10003;' : ''}`;
+
   const roles = g.roles
     .map((r) => {
-      const age =
-        r.ageDays === null
-          ? '<span class="muted">—</span>'
-          : `${r.ageDays}일${r.ageFromArchive ? '&#10003;' : ''}`;
+      const age = ageCell(r.maxAge, r.ageFromArchive);
+
+      // 자리가 하나면 종전과 같이 제목에 링크를 건다. 이때는 base 가 아니라
+      // 원문 제목을 쓴다 — 접을 게 없으므로 지역을 뗄 이유도 없다.
+      const only = r.seats.length === 1 ? r.seats[0] : undefined;
+      if (only) {
+        return (
+          `<li><span class="role-age">${age}</span>` +
+          `<span class="role-body">` +
+          `<a href="${safeUrl(only.jobUrl)}" target="_blank" rel="noopener noreferrer">${esc(only.title)}</a>` +
+          `</span></li>`
+        );
+      }
+
+      // 여러 건이면 제목을 한 번만 쓰고 자리를 칩으로 편다. 같은 제목에 링크를
+      // 여러 번 걸면 어느 링크가 어느 자리인지 구분할 수 없다.
+      const chips = r.seats
+        .map((s) => {
+          const days = s.ageDays === null ? '—' : `${s.ageDays}일`;
+          const label = s.region ? `${esc(s.region)} · ${days}` : days;
+          return (
+            `<a class="seat" href="${safeUrl(s.jobUrl)}" target="_blank" rel="noopener noreferrer">` +
+            `${label}${s.ageFromArchive ? '&#10003;' : ''}</a>`
+          );
+        })
+        .join('');
+
       return (
         `<li><span class="role-age">${age}</span>` +
-        `<a href="${safeUrl(r.jobUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></li>`
+        `<span class="role-body">` +
+        `<span class="role-name">${esc(r.title)}` +
+        `<span class="role-dup" title="같은 직무로 ${r.seats.length}건이 동시에 열려 있습니다">&times;${r.seats.length}</span>` +
+        `</span>` +
+        `<span class="role-seats">${chips}</span>` +
+        `</span></li>`
       );
     })
     .join('');
 
+  // 접힌 게 있을 때만 직무 수를 덧붙인다. 같은 값을 두 번 쓰면 노이즈다.
+  const collapsed = g.roleCount < g.count;
+  const seatText = collapsed ? `${g.count}개 자리 · ${g.roleCount}개 직무` : `${g.count}개 자리`;
+
+  // 초안용 직무 라벨. 지역 변형이면 지역을, 아니면 자리 수를 괄호로 밝힌다.
+  // 초안 문구가 영어이므로 여기서도 영어를 쓴다.
+  const draftRoles = g.roles.map((r) => {
+    const only = r.seats.length === 1 ? r.seats[0] : undefined;
+    if (only) return only.title;
+    const regions = r.seats.map((s) => s.region).filter((x): x is string => Boolean(x));
+    return regions.length === r.seats.length
+      ? `${r.title} (${regions.join(', ')})`
+      : `${r.title} (${r.seats.length} openings)`;
+  });
+
   return `
 <article class="group-card" data-groups="${esc([...g.tabGroups].join(' '))}"
          data-search="${esc(g.searchBlob)}" data-count="${g.count}"
+         data-seats="${g.count}" data-rolecount="${g.roleCount}"
          data-age="${esc(g.maxAge ?? 0)}" data-rel="${g.topRel}"
          data-company="${esc(g.company)}"
-         data-roles="${esc(JSON.stringify(g.roles.map((r) => r.title)))}"
+         data-roles="${esc(JSON.stringify(draftRoles))}"
          data-tags="${esc(g.tags.slice(0, 4).join(', '))}">
   <div class="card-top">
     <span class="sig sig-${ageTone}">${esc(ageText)}</span>
-    <span class="group-n">${g.count}개 자리${g.hotCount > 0 ? ` · hot ${g.hotCount}` : ''}</span>
+    <span class="group-n">${esc(seatText)}${g.hotCount > 0 ? ` · hot ${g.hotCount}` : ''}</span>
   </div>
 
   <h2 class="title title-company">${esc(g.company)}</h2>
@@ -538,7 +763,7 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
   ${tags ? `<div class="tags">${tags}</div>` : ''}
 
   <details class="why"${g.count > 1 ? ' open' : ''}>
-    <summary>막혀 있는 자리 ${g.count}개</summary>
+    <summary>막혀 있는 자리 ${g.count}개${collapsed ? ` · 직무 ${g.roleCount}종` : ''}</summary>
     <ul class="role-list">${roles}</ul>
   </details>
 
@@ -828,6 +1053,27 @@ ${DESIGN_TOKENS}
   }
   .role-list a { color: var(--fg); text-decoration: none; font-weight: 600; }
   .role-list a:hover { color: var(--primary); text-decoration: underline; }
+
+  /* 같은 직무가 여러 건일 때: 제목 한 줄 + 자리 칩 한 줄.
+     min-width:0 이 없으면 긴 제목이 flex 아이템을 밀어 카드를 넘친다. */
+  .role-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .role-name { font-weight: 600; color: var(--fg); }
+  .role-dup {
+    display: inline-block; margin-left: 6px; padding: 0 6px;
+    border-radius: 999px; background: #fdecea; color: #b3261e;
+    font-size: 11.5px; font-weight: 700; vertical-align: 1px;
+  }
+  .role-seats { display: flex; flex-wrap: wrap; gap: 5px; }
+  /* .role-list a 보다 명시도가 높아야 색이 먹는다 (클래스 2개 > 클래스1+타입1). */
+  .role-seats .seat {
+    padding: 1px 8px; border: 1px solid #e3e7ec; border-radius: 999px;
+    background: #fafbfc; color: var(--fg2); text-decoration: none;
+    font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .role-seats .seat:hover {
+    border-color: var(--primary); color: var(--primary); text-decoration: none;
+  }
+  .role-seats .seat:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .muted { color: var(--muted); }
 
   /* 제외 감사 */
@@ -939,6 +1185,13 @@ ${DESIGN_TOKENS}
     같은 회사의 여러 자리가 흩어져 있으면 같은 곳에 중복으로 연락하게 됩니다.
     경과일은 "얼마나 채워지지 않고 있는가"이며 &#10003; 는 제3자 아카이브가 그 시점의
     존재를 증명한 값입니다. 신뢰도 50% 미만에서는 Hot 을 부여하지 않습니다.
+    <br><br>
+    <strong>같은 직무의 중복 공고는 접혀 있습니다.</strong>
+    <span class="role-dup">&times;3</span> 배지는 같은 직무로 세 자리가 동시에 열려 있다는
+    뜻입니다. 지역만 다른 변형도 함께 묶으며, 옆의 칩이 개별 공고 링크입니다. 이 구분은
+    제안 논지를 바꿉니다 &mdash; "여러 분야를 못 뽑는다"보다 "이 한 자리를 여러 번
+    시도하고도 못 뽑았다"가 더 강한 근거입니다. 접미사가 알려진 지역 표현일 때만 묶으므로,
+    묶이지 않은 변형이 보이면 그대로 개별 직무로 읽으면 됩니다.
     <br><br>
     <strong>콜드메일 초안은 템플릿 기반입니다.</strong>
     관측된 신호(경과일·집중 채용·스택)만으로 구성하며 LLM 을 쓰지 않습니다. 그래서
@@ -1113,6 +1366,7 @@ ${DESIGN_TOKENS}
     var age = card.getAttribute('data-age');
     var tags = card.getAttribute('data-tags') || '';
     var n = roles.length;
+    var seats = Number(card.getAttribute('data-seats') || n);
 
     var lines = [];
     lines.push('Subject: ' + n + ' open ' + (n === 1 ? 'role' : 'roles') +
@@ -1120,9 +1374,12 @@ ${DESIGN_TOKENS}
     lines.push('');
     lines.push('Hi ' + company + ' team,');
     lines.push('');
+    /* 자리 수가 직무 수보다 많으면 그 사실을 밝힌다. "같은 자리를 여러 번 올렸다"는
+       것이 "여러 분야를 못 뽑는다"보다 강한 근거이므로 논지에서 빼면 손해다. */
     lines.push(
       'From the outside it looks like ' + n + ' ' + (n === 1 ? 'position' : 'positions') +
       ' on your team ' + (n === 1 ? 'has' : 'have') + ' been open for a while' +
+      (seats > n ? ' (' + seats + ' separate postings)' : '') +
       (age && age !== '0' ? ', the longest for ' + age + '+ days' : '') + ':'
     );
     roles.slice(0, 6).forEach(function (r) { lines.push('  - ' + r); });

@@ -91,6 +91,17 @@ jobs:
       - name: HTML 리포트 생성
         run: npx tsx src/pipeline/report-html.ts
 
+      # 커밋 직전에 원장이 줄어들지 않았는지 확인한다.
+      #
+      # 2026-07-31 에 봇이 커밋한 관측 5,558줄이 스테일한 작업트리 커밋으로
+      # 사라진 사고가 있었다(d9e9ec9 → 9f95905). 앱 코드에는 원장을 줄일 경로가
+      # 없으므로 손실은 항상 git 경로에서 오고, 따라서 검사도 커밋 직전에 둔다.
+      #
+      # 실패 시 커밋을 진행하지 않는다. 잘못된 상태를 푸시하면 다음 실행이 그걸
+      # 이어받아 손실이 확정된다 — 여기서 멈추는 편이 복구가 쉽다.
+      - name: 원장 회귀 검사
+        run: npx tsx src/scripts/check-ledger.ts
+
       - name: 스냅샷 커밋
         run: |
           git config user.name  "hiresignal-bot"
