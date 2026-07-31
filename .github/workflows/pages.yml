@@ -1,0 +1,64 @@
+# GitHub Pages 배포.
+#
+# 왜 별도 워크플로우인가:
+# Pages 소스 설정에는 두 가지 모드가 있다.
+#   (A) "Deploy from a branch" — main / docs 를 지정하면 GitHub가 알아서 서빙한다.
+#       이 워크플로우 없이 동작한다.
+#   (B) "GitHub Actions" — 배포를 워크플로우가 담당한다. 최신 기본값이며,
+#       이 파일이 없으면 아무것도 배포되지 않는다.
+#
+# 어느 모드인지 저장소 설정을 읽을 방법이 없으므로 (B)를 지원하는 워크플로우를
+# 둔다. (A)로 설정되어 있으면 이 워크플로우는 "Pages site not configured for
+# Actions" 로 실패하는데, 그 실패 자체가 어느 모드인지 알려주는 진단이 된다.
+#
+# 공개 페이지는 이 프로젝트의 검증 장치다. 아웃바운드로 프리랜서에게 물어볼 수
+# 없는 상황이라, 공개해 두고 액세스 요청(GitHub Issue) 수로 수요를 측정한다.
+# 따라서 배포가 조용히 실패하면 검증 자체가 시작되지 않는다.
+
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    # 일일 스캔이 docs/index.html 을 갱신할 때마다 재배포된다.
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 순차적으로. 진행 중인 배포를 취소하지 않는다 —
+# 중간 상태로 사이트가 남는 것을 피한다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: 리포지토리 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Pages 설정
+        uses: actions/configure-pages@v5
+
+      - name: 산출물 업로드
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # docs/ 만 배포한다. data/ 의 내부용 전체 리포트는 공개하지 않는다.
+          path: docs
+
+      - name: 배포
+        id: deployment
+        uses: actions/deploy-pages@v4
