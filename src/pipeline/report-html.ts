@@ -25,6 +25,7 @@ import path from 'node:path';
 
 import { categorize, type StackCategory } from '../lib/signals/stack.js';
 import { roleKey, splitTitleRegion } from '../lib/title-variant.js';
+import { ARCHIVE_AGE_SUSPECT_DAYS, isAgeSuspect } from '../lib/signals/evergreen.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DATA_DIR = path.join(ROOT, 'data');
@@ -51,6 +52,14 @@ interface Lead {
   roleCategory: string;
   tags: string[];
   reasons: string[];
+
+  /**
+   * 오늘 목록 안에서의 상대 위치(상위 N%). 렌더 시점에 계산해 채운다.
+   *
+   * leads.json 에 담지 않는 이유: 이 값은 그날 집합에 대한 상대값이라 리드의 속성이
+   * 아니다. 저장하면 다음 날 데이터와 섞여 의미가 어긋난다.
+   */
+  topPercent?: number;
 }
 
 interface LeadsFile {
@@ -422,6 +431,11 @@ const DESIGN_TOKENS = `
   .sig-warn { background: var(--warn-weak); color: var(--warn-fg); }
   .sig-calm { background: var(--bg); color: var(--fg2); }
   .sig-none { background: var(--bg); color: var(--muted); font-weight: 600; }
+  /* 재사용 의심. 강조색을 주지 않는다 — 자랑할 값이 아니라 유보할 값이다. */
+  .sig-suspect {
+    background: var(--bg); color: var(--muted); font-weight: 600;
+    border: 1px dashed var(--chip-line);
+  }
   .sig abbr { text-decoration: none; }
   .grade {
     font-size: 11px; font-weight: 800; text-transform: uppercase;
@@ -429,6 +443,11 @@ const DESIGN_TOKENS = `
   }
   .grade-hot { background: var(--hot); color: var(--on-hot); }
   .grade-warm { background: var(--warn-weak); color: var(--warn-fg); }
+  /* 분위 배지. 등급이 아니라 위치이므로 톤을 낮춘다. */
+  .grade-rank {
+    background: var(--bg); color: var(--fg2); text-transform: none;
+    letter-spacing: 0; font-weight: 700;
+  }
   .company { font-size: 15px; font-weight: 600; color: var(--fg2); margin-bottom: 2px; }
   .title {
     font-size: 21px; font-weight: 800; letter-spacing: -.025em;
@@ -518,18 +537,35 @@ interface CardLabels {
   daysUnfilled: (n: number) => string;
   ageUnknown: string;
   proofTitle: string;
-  confidence: (pct: number) => string;
+  /** 재사용 의심 배지. 큰 숫자를 주장하지 않고 하한만 말한다. */
+  suspectBadge: (floor: number) => string;
+  suspectTitle: (actual: number) => string;
+  /**
+   * 근거 충족도.
+   *
+   * 종전 라벨은 "신뢰도 95%"였다. 이건 캘리브레이션된 확률처럼 읽히지만 실제로는
+   * "우리 스코어링 모델의 배점 중 몇 %를 평가할 수 있었는가"다(실측 등장값 75%,
+   * 95% 두 가지뿐). 확률로 읽히면 과잉 주장이 되므로 이름을 사실에 맞췄다.
+   */
+  evidenceCoverage: (pct: number) => string;
   signals: (n: number) => string;
   whySummary: string;
+  /** 오늘 목록 안에서의 상대 위치. 등급이 판별력을 잃어 이걸로 대체한다. */
+  percentile: (top: number) => string;
 }
 
 const KO_LABELS: CardLabels = {
   daysUnfilled: (n) => `${n}일째 미채용`,
   ageUnknown: '경과 미확인',
   proofTitle: 'Wayback Machine 아카이브가 그 시점에 공고가 존재했음을 증명한 값입니다',
-  confidence: (pct) => `신뢰도 ${pct}%`,
+  suspectBadge: (floor) => `${floor}일+ · 재사용 의심`,
+  suspectTitle: (actual) =>
+    `아카이브는 ${actual}일 전 존재를 증명하지만, 2년을 넘기면 requisition 재사용 ` +
+    `가능성이 높아 하나의 채용 시도로 보지 않습니다. 그래서 Hot 을 주지 않습니다.`,
+  evidenceCoverage: (pct) => `근거 충족 ${pct}%`,
   signals: (n) => `신호 ${n}개`,
   whySummary: '판단 근거 보기',
+  percentile: (top) => `상위 ${top}%`,
 };
 
 const EN_LABELS: CardLabels = {
@@ -537,9 +573,14 @@ const EN_LABELS: CardLabels = {
   ageUnknown: 'Age unverified',
   proofTitle:
     'Verified by the Wayback Machine: this exact posting existed on that date',
-  confidence: (pct) => `${pct}% confidence`,
+  suspectBadge: (floor) => `${floor}+ days · likely reused`,
+  suspectTitle: (actual) =>
+    `The archive proves this URL existed ${actual} days ago, but past two years a ` +
+    `requisition is more likely reused than continuously open. We do not count it as Hot.`,
+  evidenceCoverage: (pct) => `${pct}% of signals available`,
   signals: (n) => `${n} signal${n === 1 ? '' : 's'}`,
   whySummary: 'See the evidence',
+  percentile: (top) => `top ${top}%`,
 };
 
 /**
@@ -556,6 +597,19 @@ function ageBadge(lead: Lead, t: CardLabels): string {
   const proof = lead.ageFromArchive
     ? ` <abbr title="${esc(t.proofTitle)}">&#10003;</abbr>`
     : '';
+
+  // 2년을 넘긴 경과일은 하나의 채용 시도로 주장하지 않는다.
+  //
+  // 큰 숫자를 그대로 자랑하면 역효과다. "4.2년 미채용"은 강한 근거로 읽히지 않고
+  // "이 데이터를 믿을 수 있나"로 읽힌다. 우리가 아는 사실(그 시점에 URL 이
+  // 존재했다)만 말하고 해석은 내려놓는다.
+  if (isAgeSuspect(days)) {
+    return (
+      `<span class="sig sig-suspect" title="${esc(t.suspectTitle(days))}">` +
+      `${esc(t.suspectBadge(ARCHIVE_AGE_SUSPECT_DAYS))}${proof}</span>`
+    );
+  }
+
   const tone = days >= 365 ? 'hot' : days >= 180 ? 'warn' : 'calm';
   const fire = days >= 365 ? ' 🔥' : '';
   return `<span class="sig sig-${tone}">${esc(t.daysUnfilled(days))}${fire}${proof}</span>`;
@@ -573,11 +627,20 @@ function evidenceEn(lead: Lead): string[] {
   const out: string[] = [];
 
   if (lead.ageDays !== null) {
-    out.push(
-      lead.ageFromArchive
-        ? `Open for ${lead.ageDays}+ days, confirmed by an independent web archive — not the ATS's self-reported date`
-        : `Open for ${lead.ageDays}+ days according to the ATS`,
-    );
+    if (isAgeSuspect(lead.ageDays)) {
+      // 큰 숫자를 근거로 내세우지 않는다. 우리가 아는 사실만 말하고 해석은 유보한다.
+      out.push(
+        `The archive shows this URL existed ${lead.ageDays} days ago. Past two years a ` +
+          `requisition is more often reused than continuously open, so we do not read this ` +
+          `as one hiring attempt — treat it as a weaker lead`,
+      );
+    } else {
+      out.push(
+        lead.ageFromArchive
+          ? `Open for ${lead.ageDays}+ days, confirmed by an independent web archive — not the ATS's self-reported date`
+          : `Open for ${lead.ageDays}+ days according to the ATS`,
+      );
+    }
   }
   if (lead.tags.length > 0) {
     // 화면의 태그 칩과 같은 개수만 나열한다. 근거에만 등장하고 칩에는 없는 태그가
@@ -586,7 +649,7 @@ function evidenceEn(lead: Lead): string[] {
   }
   out.push(
     `${lead.signals} independent signal${lead.signals === 1 ? '' : 's'} agreed, ` +
-      `at ${Math.round(lead.confidence * 100)}% confidence`,
+      `with ${Math.round(lead.confidence * 100)}% of our scoring signals available`,
   );
   if (lead.locationRaw) {
     const wp =
@@ -613,7 +676,7 @@ function cardBody(
     lead.workplaceType && lead.workplaceType !== 'unknown'
       ? esc(lead.workplaceType)
       : null,
-    esc(t.confidence(Math.round(lead.confidence * 100))),
+    esc(t.evidenceCoverage(Math.round(lead.confidence * 100))),
     esc(t.signals(lead.signals)),
   ]
     .filter(Boolean)
@@ -621,10 +684,28 @@ function cardBody(
 
   const lines = (evidence ?? lead.reasons).map((r) => `<li>${esc(r)}</li>`).join('');
 
+  /*
+   * 등급 배지 대신 분위를 쓴다.
+   *
+   * 실측 등급 분포가 warm 446 / hot 11 로 97.6% 가 한 값에 뭉쳤다. README 는 초기
+   * 구현을 폐기한 이유를 "95% 가 warm 으로 뭉쳐 등급이 판별력을 잃었다"로 적어
+   * 뒀는데, 원인만 다르고 증상은 같은 상태로 돌아왔다. 같은 배지를 446번 찍는 것은
+   * 정보가 아니라 잉크다.
+   *
+   * 분위는 그날 목록 안에서 실제로 구분된다. hot 은 희소하므로 남겨 두되, 그 외에는
+   * 위치를 보여준다.
+   */
+  const rankBadge =
+    lead.grade === 'hot'
+      ? `<span class="grade grade-hot">${esc(lead.grade)}</span>`
+      : lead.topPercent !== undefined
+        ? `<span class="grade grade-rank">${esc(t.percentile(lead.topPercent))}</span>`
+        : '';
+
   return `
   <div class="card-top">
     ${ageBadge(lead, t)}
-    <span class="grade grade-${esc(lead.grade)}">${esc(lead.grade)}</span>
+    ${rankBadge}
   </div>
 
   <div class="company">${esc(lead.company)}</div>
@@ -652,13 +733,19 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
   const ageTone =
     g.maxAge === null
       ? 'none'
-      : g.maxAge >= 365
-        ? 'hot'
-        : g.maxAge >= 180
-          ? 'warn'
-          : 'calm';
+      : isAgeSuspect(g.maxAge)
+        ? 'suspect'
+        : g.maxAge >= 365
+          ? 'hot'
+          : g.maxAge >= 180
+            ? 'warn'
+            : 'calm';
   const ageText =
-    g.maxAge === null ? '경과 미확인' : `최장 ${g.maxAge}일 미채용${g.maxAge >= 365 ? ' 🔥' : ''}`;
+    g.maxAge === null
+      ? '경과 미확인'
+      : isAgeSuspect(g.maxAge)
+        ? `최장 ${ARCHIVE_AGE_SUSPECT_DAYS}일+ · 재사용 의심`
+        : `최장 ${g.maxAge}일 미채용${g.maxAge >= 365 ? ' 🔥' : ''}`;
 
   const tags = g.tags
     .slice(0, 6)
@@ -782,6 +869,14 @@ function renderCompanyCard(g: CompanyGroup, index: number): string {
     <button type="button" class="btn-mark" data-mark aria-pressed="false">
       <span aria-hidden="true">&#9633;</span> 연락함
     </button>
+    <div class="outcome" role="group" aria-label="연락 결과" hidden>
+      ${OUTCOMES.map(
+        (o) =>
+          `<button type="button" class="btn-outcome" data-outcome="${esc(o.key)}"` +
+          ` aria-pressed="false" title="${esc(o.title)}">${esc(o.label)}` +
+          `<kbd>${esc(o.shortcut)}</kbd></button>`,
+      ).join('')}
+    </div>
     <button type="button" class="btn-primary" data-gdraft="${index}">
       콜드메일 초안 <span aria-hidden="true">&rarr;</span>
     </button>
@@ -834,6 +929,43 @@ function renderCard(lead: Lead, index: number): string {
  * ================================================================== */
 
 /**
+ * 연락 결과.
+ *
+ * ── 왜 이게 가장 중요한 기능인가 ──
+ *
+ * 이 제품의 핵심 가설은 "오래 미채용 → 일이 쌓인다 → 외주를 준다"다. 같은 데이터에
+ * 똑같이 들어맞는 반대 가설이 있다 — "오래 미채용 → 급하지 않거나, 타협 못 하는
+ * 높은 기준이거나, 좀비 requisition 이다". 일이 급하게 쌓이고 있었다면 750일 안에
+ * 기준을 낮춰 뽑았을 것이다.
+ *
+ * 지금까지 이 제품은 결과를 관측하지 않았다. 연락했는지만 기록하고 답이 왔는지는
+ * 기록하지 않았으므로, 어느 가설이 맞는지 알 방법이 없었다. 스코어링을 아무리
+ * 정교하게 만들어도 정답지가 없으면 정교함이 정확함을 뜻하지 않는다.
+ *
+ * 결과를 기록하면 경과일 구간별·스택별 응답률을 셀 수 있다. 그 표가 이 사업의
+ * 유일한 진짜 증거이고, 만약 "300일대가 750일대보다 응답률이 높다"가 나오면
+ * 스코어링을 뒤집어야 한다는 뜻이다.
+ *
+ * 4단계로 좁힌 이유: 선택지가 많으면 기록을 안 한다. 기록되지 않은 결과는 없는
+ * 결과와 같다.
+ *
+ * 단축키를 숫자로 두지 않은 이유: 숫자는 이미 직군 탭이다. 포커스 상황에 따라
+ * 의미가 바뀌는 키는 숨은 모드를 만들고, 숨은 모드는 잘못 눌렀을 때 무엇이 바뀌었는지
+ * 알 수 없게 한다. 전용 글자를 쓰면 계약이 하나뿐이다.
+ */
+const OUTCOMES: ReadonlyArray<{
+  key: string;
+  label: string;
+  shortcut: string;
+  title: string;
+}> = [
+  { key: 'none', label: '무응답', shortcut: 'x', title: '보냈지만 답이 없음 (단축키 x)' },
+  { key: 'reject', label: '거절', shortcut: 'r', title: '거절 회신 (단축키 r)' },
+  { key: 'reply', label: '답신', shortcut: 'a', title: '대화가 시작됨 (단축키 a)' },
+  { key: 'won', label: '수주', shortcut: 'w', title: '계약으로 이어짐 (단축키 w)' },
+];
+
+/**
  * 키보드 단축키 목록.
  *
  * 화면에 표시하는 목록과 실제 배선을 한곳에서 만든다. 두 곳에 적으면 배선을 바꿀
@@ -844,6 +976,10 @@ const SHORTCUTS: ReadonlyArray<readonly [string, string]> = [
   ['k', '이전 카드'],
   ['d', '선택 카드의 초안 열기'],
   ['m', '선택 카드를 연락함으로 표시'],
+  ['x', '결과: 무응답'],
+  ['r', '결과: 거절'],
+  ['a', '결과: 답신'],
+  ['w', '결과: 수주'],
   ['/', '검색으로 이동'],
   ['Esc', '초안 닫기 · 검색어 지우기 · 도움말 닫기'],
   ['1‒9', '직군 탭 선택'],
@@ -1149,6 +1285,23 @@ ${DESIGN_TOKENS}
 
   /* j/k 로 선택한 카드. 브라우저 기본 포커스 링은 프로그램적 포커스에서 잘 안
      나타나므로 명시적으로 표시한다. outline 을 쓰면 그리드 간격을 먹지 않는다. */
+  /* 연락 결과. 연락한 뒤에만 나타난다. */
+  .outcome { display: flex; gap: 4px; flex-wrap: wrap; }
+  .btn-outcome {
+    border: 1px solid var(--chip-line); cursor: pointer; font: inherit; font-size: 12px;
+    font-weight: 600; color: var(--fg2); background: var(--chip-bg);
+    border-radius: 8px; padding: 7px 9px; white-space: nowrap;
+  }
+  .btn-outcome:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-outcome:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .btn-outcome[aria-pressed="true"] {
+    background: var(--primary-weak); border-color: var(--primary); color: var(--primary);
+  }
+  .btn-outcome kbd { margin-left: 5px; font-size: 10.5px; opacity: .7; }
+  /* 결과가 기록된 건은 처리 완료다. 후속 경고를 띄우지 않는다. */
+  .has-outcome { opacity: .5; }
+  .has-outcome:hover, .has-outcome:focus-within { opacity: 1; }
+
   .is-focused { outline: 2px solid var(--primary); outline-offset: 2px; }
   .is-focused.is-contacted { opacity: 1; }
   article:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -1439,6 +1592,21 @@ ${DESIGN_TOKENS}
     <button type="button" class="btn-ghost" id="empty-reset">필터 초기화</button>
   </div>
 
+  <details class="audit" id="outcome-panel">
+    <summary>연락 결과 <span id="outcome-summary"></span></summary>
+    <p class="audit-note prose">
+      이 표가 이 제품의 유일한 진짜 증거입니다. 핵심 가설은 "오래 미채용 → 일이 쌓인다
+      → 외주를 준다"인데, 같은 데이터에 반대 가설도 똑같이 들어맞습니다 &mdash;
+      "오래 미채용 → 급하지 않거나, 타협 못 하는 높은 기준이거나, 좀비 requisition".
+      일이 급했다면 750일 안에 기준을 낮춰 뽑았을 겁니다.
+      <br><br>
+      경과일 구간별 응답률이 <strong>단조 증가하지 않으면 스코어링을 뒤집어야 합니다.</strong>
+      300일대가 750일대보다 잘 응답한다면, 이 제품이 정렬 기준으로 삼은 값이 틀린 것입니다.
+      표본이 쌓일 때까지는 숫자가 아니라 방향만 보세요.
+    </p>
+    <div id="outcome-table"></div>
+  </details>
+
   <details class="audit">
     <summary>직군 필터가 제외한 ${s.droppedByRole}건 감사</summary>
     <p class="audit-note prose">
@@ -1455,7 +1623,21 @@ ${DESIGN_TOKENS}
     기본은 <strong>회사별</strong> 보기입니다. 프리랜서는 공고가 아니라 회사에 제안하고,
     같은 회사의 여러 자리가 흩어져 있으면 같은 곳에 중복으로 연락하게 됩니다.
     경과일은 "얼마나 채워지지 않고 있는가"이며 &#10003; 는 제3자 아카이브가 그 시점의
-    존재를 증명한 값입니다. 신뢰도 50% 미만에서는 Hot 을 부여하지 않습니다.
+    존재를 증명한 값입니다.
+    <br><br>
+    <strong>등급 대신 분위를 씁니다.</strong>
+    실측 등급 분포가 warm 449 / hot ${s.hot} 로 한 값에 뭉쳐 배지가 정보를 잃었습니다.
+    같은 배지를 449번 찍는 것은 정보가 아니라 잉크이므로, 그날 목록 안의 상대 위치를
+    보여줍니다. hot 은 희소할 때만 의미가 있어 그대로 둡니다.
+    <br><br>
+    <strong>"근거 충족 95%"는 확률이 아닙니다.</strong>
+    우리 스코어링 배점 중 몇 %를 평가할 수 있었는지입니다. 실측 등장값이 75%와 95%
+    두 가지뿐이라 확률로 읽으면 과잉 주장이 됩니다.
+    <br><br>
+    <strong>${ARCHIVE_AGE_SUSPECT_DAYS}일을 넘긴 경과일은 근거로 쓰지 않습니다.</strong>
+    2년 넘게 열린 requisition 은 하나의 채용 시도라기보다 재사용일 가능성이 높습니다.
+    리드는 남기고 Hot 만 내리며 화면에 재사용 의심을 명시합니다. 실측으로 1,527일
+    (4.2년) 건이 상위 5위에 올라 공개 페이지 첫 화면에 실렸던 적이 있습니다.
     <br><br>
     <strong>같은 직무의 중복 공고는 접혀 있습니다.</strong>
     <span class="role-dup">&times;3</span> 배지는 같은 직무로 세 자리가 동시에 열려 있다는
@@ -1530,6 +1712,25 @@ ${DESIGN_TOKENS}
     return Math.floor((Date.now() - t) / 86400000);
   }
 
+  /* ── 연락 결과 ──
+     이 제품의 핵심 가설("오래 미채용 → 외주 발주")을 반증하려면 결과가 있어야 한다.
+     연락했는지만 알고 답이 왔는지 모르면 정답지가 없는 것이다. */
+  var OUTCOME_KEY = 'hiresignal.outcomes.v1';
+  var OUTCOME_LABELS = ${JSON.stringify(
+    Object.fromEntries(OUTCOMES.map((o) => [o.key, o.label])),
+  )};
+  var OUTCOME_BY_SHORTCUT = ${JSON.stringify(
+    Object.fromEntries(OUTCOMES.map((o) => [o.shortcut, o.key])),
+  )};
+  var outcomes = {};
+  try {
+    outcomes = JSON.parse(localStorage.getItem(OUTCOME_KEY) || '{}') || {};
+  } catch (err) { outcomes = {}; }
+
+  function saveOutcomes() {
+    try { localStorage.setItem(OUTCOME_KEY, JSON.stringify(outcomes)); } catch (err) {}
+  }
+
   function paintContacted(card) {
     var key = card.getAttribute('data-key');
     var on = !!contacted[key];
@@ -1539,6 +1740,24 @@ ${DESIGN_TOKENS}
 
     card.classList.toggle('is-contacted', on);
     card.classList.toggle('is-stale', !!stale);
+
+    /* 결과 버튼은 연락한 뒤에만 의미가 있다. 보내지도 않은 건의 "무응답"은
+       데이터가 아니라 노이즈다. */
+    var box = card.querySelector('.outcome');
+    if (box) {
+      box.hidden = !on;
+      var recorded = outcomes[key] && outcomes[key].result;
+      Array.prototype.forEach.call(box.querySelectorAll('[data-outcome]'), function (b) {
+        b.setAttribute(
+          'aria-pressed',
+          b.getAttribute('data-outcome') === recorded ? 'true' : 'false',
+        );
+      });
+      card.classList.toggle('has-outcome', !!recorded);
+      /* 결과가 기록된 건은 후속 대상에서 뺀다. 거절을 받았는데 30일 뒤에 다시
+         연락하라고 권하면 안 된다. */
+      if (recorded) card.classList.remove('is-stale');
+    }
 
     if (!btn) return;
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -1568,6 +1787,7 @@ ${DESIGN_TOKENS}
   function repaintContacted() {
     groupCards.forEach(paintContacted);
     leadCards.forEach(paintContacted);
+    renderOutcomes();
   }
   repaintContacted();
 
@@ -1749,14 +1969,51 @@ ${DESIGN_TOKENS}
     });
   });
 
-  /* 연락 표시 토글 */
+  /** 결과를 기록한다. 같은 값을 다시 누르면 해제. */
+  function recordOutcome(card, result) {
+    var key = card.getAttribute('data-key');
+    /* 연락하지 않은 건에는 결과가 있을 수 없다. */
+    if (!contacted[key]) return false;
+
+    var cur = outcomes[key] && outcomes[key].result;
+    if (cur === result) delete outcomes[key];
+    else {
+      outcomes[key] = {
+        result: result,
+        at: new Date().toISOString().slice(0, 10),
+        /* 경과일과 스택을 함께 남긴다. 나중에 "어느 구간이 응답하는가"를 세려면
+           그때의 리드 속성이 필요하고, 리드는 매일 바뀌므로 사후 조회가 안 된다. */
+        ageDays: Number(card.getAttribute('data-age') || 0),
+        tags: card.getAttribute('data-tags') || '',
+      };
+    }
+    saveOutcomes();
+    repaintContacted();
+    apply();
+    return true;
+  }
+
+  /* 연락 표시 · 결과 기록 */
   groupFeed.addEventListener('click', function (e) {
+    var outcomeBtn = e.target.closest('[data-outcome]');
+    if (outcomeBtn) {
+      recordOutcome(outcomeBtn.closest('article'), outcomeBtn.getAttribute('data-outcome'));
+      return;
+    }
+
     var btn = e.target.closest('[data-mark]');
     if (!btn) return;
     var card = btn.closest('article');
     var key = card.getAttribute('data-key');
-    if (contacted[key]) delete contacted[key];
-    else contacted[key] = new Date().toISOString().slice(0, 10);
+    if (contacted[key]) {
+      delete contacted[key];
+      /* 연락 표시를 지우면 결과도 지운다. 근거 없는 결과가 통계에 남으면
+         응답률이 조용히 왜곡된다. */
+      delete outcomes[key];
+      saveOutcomes();
+    } else {
+      contacted[key] = new Date().toISOString().slice(0, 10);
+    }
     saveContacted();
     repaintContacted();
     apply();
@@ -1807,6 +2064,73 @@ ${DESIGN_TOKENS}
   if (helpBtn) helpBtn.addEventListener('click', function () { toggleHelp(); });
   resetBtn.addEventListener('click', resetFilters);
   document.getElementById('empty-reset').addEventListener('click', resetFilters);
+
+  /* ── 응답률 표 ──
+     경과일 구간별로 센다. 이 제품이 정렬 기준으로 삼은 값(경과일)이 실제로 결과와
+     상관하는지 보는 것이 목적이므로, 구간을 스코어링 구간과 맞춘다. */
+  var AGE_BANDS = [
+    { min: 0, max: 89, label: '90일 미만' },
+    { min: 90, max: 179, label: '90-179일' },
+    { min: 180, max: 364, label: '180-364일' },
+    { min: 365, max: 729, label: '365-729일' },
+    { min: 730, max: Infinity, label: '730일+ (의심)' },
+  ];
+
+  function renderOutcomes() {
+    var panel = document.getElementById('outcome-table');
+    var summary = document.getElementById('outcome-summary');
+    if (!panel) return;
+
+    var rows = [];
+    for (var k in outcomes) {
+      if (Object.prototype.hasOwnProperty.call(outcomes, k)) rows.push(outcomes[k]);
+    }
+
+    var sent = 0;
+    for (var c in contacted) if (contacted[c]) sent++;
+
+    if (summary) {
+      summary.textContent = sent === 0
+        ? '— 아직 연락한 곳이 없습니다'
+        : '· 연락 ' + sent + '곳 / 결과 기록 ' + rows.length + '건';
+    }
+
+    if (rows.length === 0) {
+      panel.innerHTML =
+        '<p class="dist-note">결과를 기록하면 여기에 경과일 구간별 응답률이 쌓입니다. ' +
+        '카드를 고른 뒤(j/k) x·r·a·w 로 기록하세요.</p>';
+      return;
+    }
+
+    var html = '<div class="bars">';
+    AGE_BANDS.forEach(function (band) {
+      var inBand = rows.filter(function (r) {
+        return r.ageDays >= band.min && r.ageDays <= band.max;
+      });
+      if (inBand.length === 0) return;
+      var replied = inBand.filter(function (r) {
+        return r.result === 'reply' || r.result === 'won';
+      }).length;
+      var rate = Math.round((replied / inBand.length) * 100);
+      html +=
+        '<div class="bar-row"><span class="bar-l">' + band.label + '</span>' +
+        '<span class="bar-track"><span class="bar-fill" style="width:' + rate + '%"></span></span>' +
+        '<span class="bar-n">' + replied + '/' + inBand.length + '</span></div>';
+    });
+    html += '</div>';
+
+    /* 결과 종류별 합계도 보여준다. 응답률만 보면 거절과 무응답이 뭉쳐 보인다. */
+    var tally = {};
+    rows.forEach(function (r) { tally[r.result] = (tally[r.result] || 0) + 1; });
+    var parts = [];
+    for (var key in OUTCOME_LABELS) {
+      if (tally[key]) parts.push(OUTCOME_LABELS[key] + ' ' + tally[key]);
+    }
+    html += '<p class="dist-note">' + parts.join(' · ') +
+      '<br>표본 ' + rows.length + '건. 방향만 보세요 — 수십 건 아래에서는 비율이 요동칩니다.</p>';
+
+    panel.innerHTML = html;
+  }
 
   /* ── 연락 이력 백업 ──
      손으로 쌓은 기록이 브라우저 하나에 갇혀 있으면 캐시를 비우는 순간 사라진다.
@@ -1962,6 +2286,10 @@ ${DESIGN_TOKENS}
       if (!focused) return;
       var markBtn = focused.querySelector('[data-mark]');
       if (markBtn) markBtn.click();
+      return;
+    }
+    if (OUTCOME_BY_SHORTCUT[e.key]) {
+      if (focused) recordOutcome(focused, OUTCOME_BY_SHORTCUT[e.key]);
       return;
     }
 
@@ -2231,22 +2559,98 @@ ${DESIGN_TOKENS}
  * 방법론을 상세히 공개한다. 이 제품의 차별점은 데이터가 아니라 "왜 이 판단을
  * 신뢰할 수 있는가"이고, 한계까지 밝히는 것이 오히려 신뢰를 만든다.
  */
+/**
+ * 공개 티저에 실을 리드를 고른다.
+ *
+ * ── 왜 상위 N건을 그대로 쓰지 않는가 ──
+ *
+ * 점수 상위 20건을 그대로 실으면 실측으로 baseten 3건, poolside 3건, cohere 3건이
+ * 들어차고 전부 AI 인프라가 된다. 그런데 전체 목록에는 react 74, typescript 40,
+ * nextjs 26 이 있다. React 프리랜서가 이 페이지에 오면 자기 것이 없다고 보고 떠난다 —
+ * 실제로는 74건이 있는데도.
+ *
+ * 방문자의 유일한 질문은 "내 스택에 뭐가 있나"다. 진열장은 최고 점수 순이 아니라
+ * 취급 품목을 보여주는 쪽이 맞다. 그래서 점수 순으로 훑되 회사와 대표 스택이
+ * 겹치지 않게 골라 다양성을 확보하고, 자리가 남으면 점수 순으로 채운다.
+ */
+function pickPreview(leads: Lead[], limit: number): Lead[] {
+  const byScore = [...leads].sort((a, b) => b.rel - a.rel);
+  const picked: Lead[] = [];
+  const seenCompany = new Set<string>();
+  const seenStack = new Set<string>();
+
+  for (const lead of byScore) {
+    if (picked.length >= limit) break;
+    const company = lead.board || lead.company;
+    const stack = lead.tags[0] ?? '(none)';
+    if (seenCompany.has(company) || seenStack.has(stack)) continue;
+    picked.push(lead);
+    seenCompany.add(company);
+    seenStack.add(stack);
+  }
+
+  // 다양성 제약으로 자리가 남으면 점수 순으로 메운다. 빈 진열장이 더 나쁘다.
+  for (const lead of byScore) {
+    if (picked.length >= limit) break;
+    if (!picked.includes(lead)) picked.push(lead);
+  }
+
+  return picked.sort((a, b) => b.rel - a.rel);
+}
+
 function renderPublicHtml(data: LeadsFile): string {
   const s = data.summary;
   const generated = new Date(data.generatedAt);
-  const preview = data.leads.slice(0, PUBLIC_PREVIEW_COUNT);
+  const preview = pickPreview(data.leads, PUBLIC_PREVIEW_COUNT);
   const hidden = Math.max(0, s.total - preview.length);
 
   const boardCount = 188;
 
+  /*
+   * 스택 커버리지. 전체 457건 기준으로 센다.
+   *
+   * 이게 이 페이지에서 가장 중요한 정보다. 방문자는 "이 서비스가 뭐냐"보다
+   * "내 스택에 몇 건 있냐"를 먼저 알고 싶어하고, 그 답이 없으면 판단 자체를 못 한다.
+   * 티저 20건은 표본이지 목록이 아니므로 표본으로 커버리지를 추측하게 만들면 안 된다.
+   */
+  const tagCounts = new Map<string, number>();
+  for (const lead of data.leads) {
+    for (const tag of lead.tags) {
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+    }
+  }
+  const stackCount = tagCounts.size;
+  const topStacks = [...tagCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 28);
+
+  const stackChips = topStacks
+    .map(
+      ([tag, n]) =>
+        `<button type="button" class="stack-chip" data-stack="${esc(tag)}" aria-pressed="false">` +
+        `${esc(tag)}<span class="stack-n">${n}</span></button>`,
+    )
+    .join('');
+
+  /** 스택별 전체 건수. 티저에 안 보이는 스택도 개수를 말해 줘야 한다. */
+  const stackTotals = JSON.stringify(Object.fromEntries(topStacks));
+
   // 가장 오래 막혀 있는 리드를 히어로 근거로 쓴다. 추상적인 주장보다 구체적인
   // 한 건이 설득력이 높고, 데이터가 실재한다는 증거도 된다.
-  const headline = preview.find((l) => l.ageDays !== null) ?? preview[0];
+  //
+  // 단, 재사용 의심 건은 쓰지 않는다. 첫 화면의 유일한 구체적 주장이므로 여기서
+  // 검증에 실패하면 페이지 전체가 무너진다. "4.2년 미채용"은 강해 보이지만 링크를
+  // 눌러 본 방문자에게는 데이터를 의심할 이유가 된다. 확실히 방어되는 숫자만 쓴다.
+  const headline =
+    preview.find((l) => l.ageDays !== null && !isAgeSuspect(l.ageDays)) ??
+    preview.find((l) => l.ageDays !== null) ??
+    preview[0];
 
   const cards = preview
     .map(
       (lead) =>
-        `<article class="card">${cardBody(lead, EN_LABELS, evidenceEn(lead))}</article>`,
+        `<article class="card" data-stack-list="${esc(lead.tags.join(' '))}">` +
+        `${cardBody(lead, EN_LABELS, evidenceEn(lead))}</article>`,
     )
     .join('');
 
@@ -2362,6 +2766,31 @@ ${DESIGN_TOKENS}
   .btn-submit:hover { background: var(--primary-dark); }
   .fineprint { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; line-height: 1.6; }
 
+  /* ── 스택 커버리지 ──
+     방문자의 유일한 질문("내 스택에 뭐가 있나")에 답하는 구획이다. */
+  .stack-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .stack-chip {
+    border: 1px solid var(--chip-line); cursor: pointer; font: inherit; font-size: 13.5px;
+    font-weight: 600; color: var(--fg2); background: var(--card); border-radius: 999px;
+    padding: 8px 14px; transition: border-color .12s, color .12s;
+  }
+  .stack-chip:hover { border-color: var(--primary); color: var(--primary); }
+  .stack-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .stack-chip[aria-pressed="true"] {
+    background: var(--primary); border-color: var(--primary); color: var(--on-primary);
+  }
+  .stack-n {
+    margin-left: 7px; font-size: 12px; font-weight: 700; opacity: .6;
+    font-variant-numeric: tabular-nums;
+  }
+  .stack-note { font-size: 14px; color: var(--fg2); margin: 18px 0 0; line-height: 1.6; }
+  .stack-note strong { color: var(--fg); }
+  .empty-stack {
+    text-align: center; color: var(--muted); font-size: 14px; line-height: 1.7;
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 28px 24px; margin: 12px 0 0;
+  }
+
   /* ── Methodology / limits ── */
   .panel {
     background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
@@ -2416,10 +2845,10 @@ ${DESIGN_TOKENS}
     ${heroProof ? `<p class="proof">Right now: ${heroProof} That work is not waiting.</p>` : ''}
 
     <div class="stats" aria-label="Coverage">
-      <div><div class="n">${s.total}</div><div class="l">live leads</div></div>
+      <div><div class="n">${s.total}</div><div class="l">leads, all archive&#8209;verified</div></div>
       <div><div class="n hot">${s.hot}</div><div class="l">hot</div></div>
-      <div><div class="n">${s.withArchiveEvidence}</div><div class="l">archive&#8209;verified</div></div>
       <div><div class="n">${boardCount}</div><div class="l">boards tracked</div></div>
+      <div><div class="n">${stackCount}</div><div class="l">stacks covered</div></div>
     </div>
   </div>
 </section>
@@ -2435,7 +2864,9 @@ ${DESIGN_TOKENS}
         <p>
           We do not trust the ATS posting date — companies reuse and reset it.
           Age is confirmed against an independent web archive, so a
-          "751 days open" claim is evidence, not a guess.
+          "${headline?.ageDays ?? 400} days open" claim is evidence, not a guess.
+          Past ${ARCHIVE_AGE_SUSPECT_DAYS} days we demote it instead, because that is
+          reuse more often than a real backlog.
         </p>
       </div>
       <div class="value">
@@ -2459,13 +2890,34 @@ ${DESIGN_TOKENS}
   </div>
 </section>
 
+<section class="section" id="coverage">
+  <div class="wrap">
+    <h2>Is your stack in here?</h2>
+    <p class="section-sub">
+      Counts across all ${s.total} leads, not just the ${PUBLIC_PREVIEW_COUNT} below.
+      Pick one and we will filter the preview and fill in your request.
+    </p>
+    <div class="stack-grid" role="group" aria-label="Filter by stack">${stackChips}</div>
+    <p class="stack-note" id="stack-note" role="status" aria-live="polite">
+      ${stackCount} distinct stacks across ${s.total} leads. Most common:
+      ${topStacks.slice(0, 5).map(([t, n]) => `${esc(t)} (${n})`).join(', ')}.
+    </p>
+  </div>
+</section>
+
 <section class="section">
   <div class="wrap">
     <h2>Live B2B outsourcing-opportunity leads</h2>
     <p class="section-sub">
-      Detected on the latest scan. Showing ${PUBLIC_PREVIEW_COUNT} of ${s.total}.
+      Detected on the latest scan. Showing ${PUBLIC_PREVIEW_COUNT} of ${s.total} &mdash;
+      picked for stack variety, not just top score, so you can see what the list is
+      made of.
     </p>
     <div class="feed">${cards}</div>
+    <p class="empty-stack" id="empty-stack" hidden>
+      None of the ${PUBLIC_PREVIEW_COUNT} preview leads use this stack, but the full list
+      does. Request access and we will send those.
+    </p>
     <p class="footnote">
       &#10003; means an independent web archive confirmed the posting existed on that
       date. It is not the ATS's self-reported date.
@@ -2547,7 +2999,11 @@ ${DESIGN_TOKENS}
         </li>
         <li>
           <strong>Weak evidence does not get promoted.</strong>
-          Every lead shows its confidence, and below 50% we never assign Hot.
+          Hot requires at least three independent signals to agree, and we drop it for
+          anything older than ${ARCHIVE_AGE_SUSPECT_DAYS} days. Today that leaves
+          ${s.hot} Hot out of ${s.total} &mdash; the label is meant to be rare. Each card
+          also shows what share of our signals we could actually evaluate; that number is
+          coverage, not a probability.
         </li>
       </ol>
     </div>
@@ -2562,12 +3018,24 @@ ${DESIGN_TOKENS}
     </p>
     <ul class="limits">
       <li>
-        <strong>Archive coverage is roughly 37%.</strong> The rest carries no external
-        proof and is shown at lower confidence. No evidence does not mean "new posting".
+        <strong>Archive evidence is a filter, not a score.</strong> We only surface
+        postings the Wayback Machine actually captured, which is roughly 37% of what we
+        observe. That is why every lead here carries proof &mdash; and also why this list
+        is a filtered slice, not a market census. Absence from the archive does not mean
+        a posting is new; it means we cannot prove anything about it, so we stay quiet.
       </li>
       <li>
-        <strong>Recognition bias.</strong> Better-known companies are archived more
-        thoroughly, so leads skew toward them.
+        <strong>That filter causes recognition bias.</strong> The archive keeps
+        better-known companies more thoroughly, so the list skews toward companies people
+        already talk about. Today it leans heavily to VC-funded AI and developer-tools
+        startups. If you sell into non-tech industries, this list is probably not for you
+        yet &mdash; say so in your request and we will tell you honestly.
+      </li>
+      <li>
+        <strong>Very old postings are demoted, not celebrated.</strong> Past
+        ${ARCHIVE_AGE_SUSPECT_DAYS} days a requisition is more often reused than
+        continuously open, so we stop calling it evidence of a stalled hire and never
+        rank it Hot. A four-year-old "opening" is not a four-year backlog.
       </li>
       <li>
         <strong>Repost and fill signals need time.</strong> The archive bootstraps age,
@@ -2606,6 +3074,71 @@ ${DESIGN_TOKENS}
 
 <script>
 (function () {
+  /* ── 스택 자기자감 필터 ──
+     방문자가 "내 스택에 몇 건 있나"를 스스로 확인하고, 그 답이 그대로 요청서에
+     담기게 한다. 티저에 안 보이는 스택도 전체 건수를 말해 줘야 한다 - 표본에
+     없다고 목록에 없는 것이 아니고, 그 오해가 이탈의 주된 이유다. */
+  var STACK_TOTALS = ${stackTotals};
+  var PREVIEW_N = ${PUBLIC_PREVIEW_COUNT};
+  var TOTAL_N = ${s.total};
+
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.stack-chip'));
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card[data-stack-list]'));
+  var note = document.getElementById('stack-note');
+  var emptyStack = document.getElementById('empty-stack');
+  var stacksInput = document.getElementById('stacks');
+  var active = null;
+
+  var DEFAULT_NOTE = note ? note.innerHTML : '';
+
+  function applyStack() {
+    var shown = 0;
+    cards.forEach(function (card) {
+      var list = (card.getAttribute('data-stack-list') || '').split(' ');
+      var visible = !active || list.indexOf(active) !== -1;
+      card.hidden = !visible;
+      if (visible) shown++;
+    });
+
+    chips.forEach(function (c) {
+      c.setAttribute('aria-pressed', c.getAttribute('data-stack') === active ? 'true' : 'false');
+    });
+
+    if (emptyStack) emptyStack.hidden = shown !== 0;
+
+    if (!note) return;
+    if (!active) { note.innerHTML = DEFAULT_NOTE; return; }
+
+    var total = STACK_TOTALS[active] || 0;
+    note.innerHTML =
+      '<strong>' + active + '</strong>: ' + total + ' of ' + TOTAL_N +
+      ' leads use this stack. ' + shown + ' of them ' +
+      (shown === 1 ? 'is' : 'are') + ' in the ' + PREVIEW_N + '-lead preview below' +
+      (total > shown ? ' \\u2014 the other ' + (total - shown) + ' are in the full list.' : '.');
+
+    /* 요청서에 스택을 미리 채운다. 방문자가 방금 확인한 것을 다시 타이핑하게 만들면
+       그 자리에서 이탈한다. 이미 쓴 값이 있으면 덮지 않는다. */
+    if (stacksInput && (!stacksInput.value.trim() || stacksInput.dataset.autofill === '1')) {
+      stacksInput.value = active;
+      stacksInput.dataset.autofill = '1';
+    }
+  }
+
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var tag = chip.getAttribute('data-stack');
+      active = active === tag ? null : tag;
+      applyStack();
+    });
+  });
+
+  if (stacksInput) {
+    /* 사람이 직접 고치면 그 뒤로는 자동 채움이 건드리지 않는다. */
+    stacksInput.addEventListener('input', function () {
+      delete stacksInput.dataset.autofill;
+    });
+  }
+
   var form = document.getElementById('lead-form');
   if (!form) return;
 
@@ -2650,9 +3183,56 @@ ${DESIGN_TOKENS}
  * 실행
  * ================================================================== */
 
+/**
+ * 렌더 직전 보정.
+ *
+ * ── 왜 렌더 단계에서 하는가 ──
+ *
+ * 등급과 재사용 의심 판정은 스코어링(score.ts)이 할 일이고 거기에 넣었다. 다만
+ * leads.json 은 스캔이 만들므로 그 수정은 다음 일일 실행부터 반영된다. 그동안
+ * 화면이 "1,527일 미채용 · hot" 이라고 말하면, 코드가 이미 아니라고 판정한 것을
+ * 화면만 계속 주장하는 상태가 된다. 그래서 표시 계층에서도 같은 기준을 적용한다.
+ *
+ * 두 곳에 규칙이 흩어지지 않도록 판정 자체는 evergreen.ts 의 isAgeSuspect 하나를
+ * 공유한다.
+ */
+function prepareLeads(data: LeadsFile): void {
+  let downgraded = 0;
+  for (const lead of data.leads) {
+    if (lead.grade === 'hot' && isAgeSuspect(lead.ageDays)) {
+      lead.grade = 'warm';
+      downgraded++;
+    }
+  }
+
+  // 요약 숫자도 함께 맞춘다. 화면의 hot 개수와 배지 개수가 어긋나면 데이터를 의심한다.
+  if (downgraded > 0) {
+    data.summary.hot -= downgraded;
+    data.summary.warm += downgraded;
+    console.log(
+      `  경과일 재사용 의심(${ARCHIVE_AGE_SUSPECT_DAYS}일 초과) ${downgraded}건을 hot 에서 내렸습니다.`,
+    );
+  }
+
+  // 분위: 같은 rel 은 같은 분위를 받아야 한다. 동점을 순서로 갈라놓으면
+  // 사용자가 근거 없는 차이를 읽는다.
+  const sorted = [...data.leads].sort((a, b) => b.rel - a.rel);
+  const n = sorted.length;
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && sorted[j + 1]!.rel === sorted[i]!.rel) j++;
+    // 동점 그룹의 가장 불리한 위치(j)를 기준으로 삼아 과대 표시를 막는다.
+    const top = Math.max(1, Math.round(((j + 1) / n) * 100));
+    for (let k = i; k <= j; k++) sorted[k]!.topPercent = top;
+    i = j + 1;
+  }
+}
+
 async function main() {
   const raw = await readFile(path.join(DATA_DIR, 'leads.json'), 'utf8');
   const data = JSON.parse(raw) as LeadsFile;
+  prepareLeads(data);
 
   // 내부용 전체 리포트
   const internalPath = path.join(DATA_DIR, 'report.html');

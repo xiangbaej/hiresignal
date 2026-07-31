@@ -42,6 +42,9 @@ import path from 'node:path';
 
 import { JSDOM, VirtualConsole } from 'jsdom';
 
+// 판정 규칙은 프로덕션과 같은 것을 쓴다. 테스트에 복사하면 규칙이 바뀔 때 어긋난다.
+import { ARCHIVE_AGE_SUSPECT_DAYS, isAgeSuspect } from '../lib/signals/evergreen.js';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REPORT = path.join(ROOT, 'data', 'report.html');
 const PUBLIC = path.join(ROOT, 'docs', 'index.html');
@@ -111,7 +114,13 @@ let html = '';
 /** 원본 데이터. 생성물이 이것과 어긋나지 않는지 대조하는 데 쓴다. */
 interface LeadsFile {
   summary: { total: number; hot: number; warm: number };
-  leads: Array<{ board: string; company: string; jobUrl: string }>;
+  leads: Array<{
+    board: string;
+    company: string;
+    jobUrl: string;
+    grade: string;
+    ageDays: number | null;
+  }>;
 }
 let leads: LeadsFile | null = null;
 
@@ -544,6 +553,151 @@ test('검색: 화면에 보이는 보드 문자열로 찾을 수 있다', async 
 
   await env.type(ats);
   assertEqual(env.visibleGroups().length, expected, `ATS 접두사(${ats})로 ${expected}곳`);
+});
+
+test('연락 결과: 연락하지 않으면 기록할 수 없다', (env) => {
+  // 보내지도 않은 건의 "무응답"은 데이터가 아니라 노이즈다. 응답률을 조용히 왜곡한다.
+  const card = env.visibleGroups()[0];
+  assertEqual(
+    card.querySelector('.outcome').hasAttribute('hidden'),
+    true,
+    '연락 전에는 결과 버튼이 숨어 있다',
+  );
+
+  env.key('j');
+  env.key('x'); // 결과 기록 시도
+  assertEqual(
+    env.win.localStorage.getItem('hiresignal.outcomes.v1'),
+    null,
+    '저장이 생기지 않는다',
+  );
+});
+
+test('연락 결과: 기록되고 경과일·스택이 함께 남는다', (env) => {
+  const card = env.visibleGroups()[0];
+  const key = card.getAttribute('data-key');
+
+  env.key('j');
+  env.key('m'); // 연락함
+  assertEqual(
+    card.querySelector('.outcome').hasAttribute('hidden'),
+    false,
+    '연락하면 결과 버튼이 나타난다',
+  );
+
+  env.key('a'); // 답신
+  const stored = JSON.parse(env.win.localStorage.getItem('hiresignal.outcomes.v1') || '{}');
+  assert(!!stored[key], '결과가 저장된다');
+  assertEqual(stored[key].result, 'reply', '누른 결과가 기록된다');
+
+  // 나중에 "어느 구간이 응답하는가"를 세려면 그때의 리드 속성이 필요하다.
+  // 리드는 매일 바뀌므로 사후 조회가 불가능하다.
+  assertEqual(
+    stored[key].ageDays,
+    Number(card.getAttribute('data-age')),
+    '경과일이 함께 남는다',
+  );
+  assertEqual(typeof stored[key].tags, 'string', '스택이 함께 남는다');
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(stored[key].at), `기록일이 남는다: ${stored[key].at}`);
+
+  const pressed = card.querySelector('[data-outcome="reply"]');
+  assertEqual(pressed.getAttribute('aria-pressed'), 'true', '버튼 상태가 반영된다');
+  assertEqual(card.classList.contains('has-outcome'), true, '처리 완료로 표시된다');
+
+  // 같은 값을 다시 누르면 해제
+  env.key('a');
+  assertEqual(
+    Object.keys(JSON.parse(env.win.localStorage.getItem('hiresignal.outcomes.v1') || '{}')).length,
+    0,
+    '같은 결과를 다시 누르면 해제된다',
+  );
+});
+
+test('연락 결과: 하나만 선택된다', (env) => {
+  const card = env.visibleGroups()[0];
+  env.key('j');
+  env.key('m');
+
+  env.key('x'); // 무응답
+  env.key('r'); // 거절로 변경
+  const pressedAll = (Array.from(card.querySelectorAll('[data-outcome]')) as any[]).filter(
+    (b) => b.getAttribute('aria-pressed') === 'true',
+  );
+  assertEqual(pressedAll.length, 1, '동시에 하나만 눌린 상태');
+  assertEqual(pressedAll[0].getAttribute('data-outcome'), 'reject', '마지막 선택이 남는다');
+});
+
+test('연락 결과: 연락 표시를 지우면 결과도 지워진다', (env) => {
+  const card = env.visibleGroups()[0];
+  const key = card.getAttribute('data-key');
+  env.key('j');
+  env.key('m');
+  env.key('w'); // 수주
+  assert(
+    !!JSON.parse(env.win.localStorage.getItem('hiresignal.outcomes.v1') || '{}')[key],
+    '결과가 있다',
+  );
+
+  env.key('m'); // 연락 표시 해제
+  // 근거 없는 결과가 통계에 남으면 응답률이 조용히 왜곡된다.
+  assert(
+    !JSON.parse(env.win.localStorage.getItem('hiresignal.outcomes.v1') || '{}')[key],
+    '연락 표시를 지우면 결과도 사라진다',
+  );
+  assertEqual(
+    card.querySelector('.outcome').hasAttribute('hidden'),
+    true,
+    '결과 버튼도 다시 숨는다',
+  );
+});
+
+test('연락 결과: 결과가 기록되면 후속 대상에서 빠진다', async (env) => {
+  // 거절을 받았는데 30일 뒤에 "후속 연락을 검토하세요"라고 권하면 안 된다.
+  const key = env.visibleGroups()[0].getAttribute('data-key');
+  const old = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+
+  const seeded = await makeEnv('', { seedStorage: JSON.stringify({ [key]: old }) });
+  try {
+    const card = seeded.doc.querySelector(`.group-card[data-key="${key}"]`);
+    assertEqual(card.classList.contains('is-stale'), true, '결과 없으면 후속 대상');
+
+    seeded.click(card.querySelector('[data-outcome="reject"]'));
+    assertEqual(card.classList.contains('is-stale'), false, '거절을 기록하면 후속 대상에서 빠진다');
+  } finally {
+    seeded.win.close();
+  }
+});
+
+test('응답률 표: 경과일 구간별로 집계된다', (env) => {
+  const panel = env.byId('outcome-table');
+  assert(!!panel, '응답률 표 영역이 있다');
+  assert(
+    panel.textContent.includes('결과를 기록하면'),
+    '기록이 없으면 안내를 보여준다',
+  );
+
+  // 서로 다른 경과일 구간의 카드 두 개를 골라 기록한다
+  const cards = env.visibleGroups() as any[];
+  const younger = cards.find((c) => Number(c.getAttribute('data-age')) < 365);
+  const older = cards.find((c) => Number(c.getAttribute('data-age')) >= 365);
+  assert(!!younger && !!older, '두 구간의 카드가 존재한다');
+
+  for (const [card, outcome] of [
+    [younger, 'reply'],
+    [older, 'none'],
+  ] as Array<[any, string]>) {
+    env.click(card.querySelector('[data-mark]'));
+    env.click(card.querySelector(`[data-outcome="${outcome}"]`));
+  }
+
+  const text = env.byId('outcome-table').textContent;
+  assert(text.includes('/'), `구간별 비율이 나온다: ${text.slice(0, 120)}`);
+  assert(text.includes('답신 1'), `결과 종류별 합계가 나온다: ${text.slice(0, 200)}`);
+  assert(text.includes('무응답 1'), '무응답도 집계된다');
+  assert(
+    env.byId('outcome-summary').textContent.includes('결과 기록 2건'),
+    `요약에 기록 수가 나온다: ${env.byId('outcome-summary').textContent}`,
+  );
 });
 
 test('연락 이력 백업: 담기와 적용이 동작한다', (env) => {
@@ -1120,7 +1274,10 @@ test('도움말에 적힌 단축키는 모두 테스트로 덮여 있다', (env)
   // 도움말은 SHORTCUTS 상수에서 렌더되므로 "적혀 있다"는 것만으로는 배선을 보장하지
   // 않는다. 새 항목을 문서에만 추가하고 배선이나 테스트를 빼먹으면 도움말이 조용히
   // 거짓말을 한다. 아래 목록이 이 파일에서 실제로 눌러 본 키다.
-  const tested = new Set(['j', 'k', 'd', 'm', '/', 'Esc', '1‒9', '0', 'v', 'h', 'u', 's', '?']);
+  const tested = new Set([
+    'j', 'k', 'd', 'm', '/', 'Esc', '1‒9', '0', 'v', 'h', 'u', 's', '?',
+    'x', 'r', 'a', 'w',
+  ]);
 
   const documented = (Array.from(env.doc.querySelectorAll('.help-row kbd')) as any[]).map(
     (el) => el.textContent.trim(),
@@ -1180,7 +1337,23 @@ test('데이터 무결성: 리드가 한 건도 사라지지 않는다', (env) =
     (el) => Number(el.textContent),
   );
   assert(summaryNums.includes(total), `요약에 총 리드 수 ${total} 이 있다`);
-  assert(summaryNums.includes(leads!.summary.hot), `요약에 hot ${leads!.summary.hot} 이 있다`);
+
+  // hot 수는 leads.json 값을 그대로 믿지 않는다. 렌더러가 재사용 의심 건(2년 초과)을
+  // hot 에서 내리므로, 같은 규칙을 적용한 기대값과 비교해야 한다. 원본 값을 그대로
+  // 쓰면 이 의도된 보정이 회귀로 잡히고, 반대로 검사를 지우면 렌더러가 hot 개수를
+  // 아무렇게나 표시해도 통과한다.
+  const expectedHot = leads!.leads.filter(
+    (l) => l.grade === 'hot' && !isAgeSuspect(l.ageDays),
+  ).length;
+  assert(
+    summaryNums.includes(expectedHot),
+    `요약에 보정된 hot ${expectedHot} 이 있다 (원본 ${leads!.summary.hot}, 의심 강등 ${leads!.summary.hot - expectedHot}건)`,
+  );
+  assertEqual(
+    (env.doc.querySelectorAll('.grade-hot') as any).length,
+    expectedHot,
+    'hot 배지 개수도 보정값과 일치',
+  );
   assert(
     summaryNums.includes(boards.size),
     `요약에 회사 수 ${boards.size} 가 있다`,

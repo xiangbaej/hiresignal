@@ -55,6 +55,41 @@ export const EVERGREEN_AGE_THRESHOLD_DAYS = 365;
  */
 export const REPORTED_AGE_CAP_DAYS = 180;
 
+/**
+ * 아카이브가 증명하는 경과일을 "하나의 채용 시도"로 읽을 수 있는 상한.
+ *
+ * ── 왜 필요한가 ──
+ *
+ * EVERGREEN_AGE_THRESHOLD_DAYS(365일)는 **ATS 보고 게시일에만** 적용된다. 그런데
+ * 나이의 1차 근거는 아카이브이고 그쪽에는 상한이 없었다. 그래서 evergreen 필터가
+ * 점수가 가장 높은 지점에서 정확히 우회됐다.
+ *
+ * 실측: linear 의 `Senior / Staff Product Engineer` 가 1,527일(4.2년)로 상위
+ * 5위에 올라 공개 페이지 첫 화면에 실렸다. 4년 열린 공고는 "못 뽑고 있다"가
+ * 아니라 채용 공고가 아니다. 회의적인 방문자가 그 링크 하나를 눌러보면 이 제품의
+ * 정직성 주장이 무너진다.
+ *
+ * ── 무엇을 하는가 ──
+ *
+ * 리드를 버리지 않는다. **경과일이라는 근거의 자격만 내린다.** URL 이 1,527일 전에
+ * 존재했다는 사실은 여전히 참이지만, 그것을 "연속된 하나의 채용 시도"로 주장할 수
+ * 없다. 그래서 Hot 을 주지 않고 화면에 재사용 의심을 명시한다.
+ *
+ * 730일은 판단이다. 단일 requisition 으로 2년을 유지하는 정상 채용은 드물고,
+ * 그보다 오래된 URL 존속은 재사용이나 사실상 상시 공고를 뜻할 가능성이 높다.
+ */
+export const ARCHIVE_AGE_SUSPECT_DAYS = 730;
+
+/**
+ * 이 경과일을 "못 뽑고 있다"의 증거로 쓸 수 있는가.
+ *
+ * 표시와 등급 양쪽에서 같은 기준을 써야 한다 — 화면은 의심을 표시하는데 등급은
+ * Hot 을 주면 사용자가 어느 쪽을 믿어야 할지 알 수 없다.
+ */
+export function isAgeSuspect(ageDays: number | null | undefined): boolean {
+  return typeof ageDays === 'number' && ageDays > ARCHIVE_AGE_SUSPECT_DAYS;
+}
+
 export type EvergreenReason = 'title_pattern' | 'age_threshold' | 'demo_board';
 
 export interface EvergreenVerdict {

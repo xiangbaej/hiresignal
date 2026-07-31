@@ -28,6 +28,7 @@ import {
   detectEvergreen,
   usableReportedAge,
   type EvergreenVerdict,
+  isAgeSuspect,
 } from './evergreen.js';
 
 /** 이 일수 이상 관측되면 "채워지지 않고 있다"고 판단한다. */
@@ -327,11 +328,24 @@ export function scoreLead(input: ScoringInput): ScoreBreakdown {
   // --- 등급: 비율 + 신호 개수 + 신뢰도를 모두 요구한다 ---
   let grade: LeadGrade = 'cold';
   let gradeCapped = false;
+  /** 근거 목록 맨 앞에 올릴 경고. 읽는 사람이 가장 먼저 알아야 하는 값이다. */
+  const reasonsPrefix: string[] = [];
+
+  // 경과일이 재사용 의심 구간이면 Hot 을 주지 않는다.
+  //
+  // 이 리드의 최상위 근거는 "N일간 못 채웠다"인데, 2년을 넘으면 그 문장이 하나의
+  // 채용 시도를 뜻한다고 볼 수 없다. 근거가 약한 것을 최상위 등급으로 올리면 목록
+  // 전체의 신뢰가 깎인다 — 실측으로 1,527일(4.2년) 리드가 상위 5위에 올라 공개
+  // 페이지 첫 화면에 실렸다.
+  //
+  // 리드 자체는 버리지 않는다. 등급만 내리고 화면에 의심을 명시한다.
+  const ageSuspect = isAgeSuspect(effectiveAge);
 
   if (
     relativeScore >= RELATIVE_THRESHOLDS.hot &&
     contributingSignals >= HOT_MIN_SIGNALS &&
-    confidence >= HOT_MIN_CONFIDENCE
+    confidence >= HOT_MIN_CONFIDENCE &&
+    !ageSuspect
   ) {
     grade = 'hot';
   } else if (
@@ -343,10 +357,18 @@ export function scoreLead(input: ScoringInput): ScoreBreakdown {
     if (relativeScore >= RELATIVE_THRESHOLDS.hot) gradeCapped = true;
   }
 
+  if (ageSuspect) {
+    reasonsPrefix.push(
+      `경과 ${effectiveAge}일 — 2년을 넘겨 requisition 재사용 가능성이 높습니다. ` +
+        `URL 이 그 시점에 존재한 것은 사실이지만 하나의 채용 시도로 보기 어려워 Hot 을 주지 않습니다`,
+    );
+  }
+
   const reasons = scored
     .filter((c) => c.available && c.points > 0)
     .sort((a, b) => b.points - a.points)
     .map((c) => c.detail);
+  reasons.unshift(...reasonsPrefix);
 
   if (gradeCapped) {
     reasons.push(
