@@ -193,21 +193,37 @@ export interface StackHit {
  * 사전에 제품명으로 등록된 회사들(stripe, shopify, figma, linear, ramp,
  * supabase, vercel, airtable, hubspot, salesforce...)에서 모두 발생한다.
  */
+/**
+ * 사명에 흔히 붙는 접미사. `supabaseinc`, `ashbyhq` 같은 슬러그를 제품명과 잇는다.
+ */
+const COMPANY_SUFFIXES = [
+  'inc', 'hq', 'io', 'ai', 'app', 'labs', 'lab', 'dev', 'cloud', 'data',
+  'tech', 'co', 'com', 'corp', 'hr',
+];
+
 function companySelfTags(companySlug: string | undefined): Set<string> {
   if (!companySlug) return new Set();
   const slug = companySlug.toLowerCase().replace(/[^a-z0-9]/g, '');
   const self = new Set<string>();
+
   for (const tag of KNOWN_TAGS) {
     const normalizedTag = tag.replace(/[^a-z0-9]/g, '');
-    // 슬러그와 태그가 서로를 포함하면 자사 언급으로 간주
-    if (
-      normalizedTag.length >= 3 &&
-      (slug === normalizedTag ||
-        slug.includes(normalizedTag) ||
-        normalizedTag.includes(slug))
-    ) {
-      self.add(tag);
-    }
+    if (normalizedTag.length < 3) continue;
+
+    // 정확히 일치하거나, 사명 접미사만 덧붙은 경우만 자사 언급으로 본다.
+    //
+    // 부분 문자열 포함(`slug.includes(tag)`)은 쓰지 않는다. 그렇게 하면 사명에
+    // 기술명이 들어간 회사가 그 태그를 통째로 잃는다 — "reactor-labs" 가
+    // `react` 태그를 잃는 식이다. 리드가 조용히 누락되는 경로이고, 오탐보다
+    // 이쪽이 더 비싸다.
+    //
+    // 이 판정이 놓치는 자사 언급은 detectBoardWideTags 가 통계적으로 걸러낸다
+    // (보드 내 40% 초과 등장 태그 제외). 두 장치가 서로를 보완한다.
+    const matches =
+      slug === normalizedTag ||
+      COMPANY_SUFFIXES.some((suffix) => slug === normalizedTag + suffix);
+
+    if (matches) self.add(tag);
   }
   return self;
 }

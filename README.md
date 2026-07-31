@@ -92,6 +92,7 @@ src/lib/store/       file-store(원자적 쓰기 + append-only 원장) / archive
 src/lib/blocklist.ts opt-out 강제
 src/pipeline/        scan / enrich-archive / report-html
 src/scripts/         boards:discover / 커넥터 검증 / 아카이브 증거 감사
+docs/index.html      공개 티저 (GitHub Pages, main /docs 브랜치 모드)
 seeds/               companies(검증된 보드) / candidates(추측) / blocklist
 data/                관측 스냅샷 · 아카이브 캐시 · 리드 산출물
 ```

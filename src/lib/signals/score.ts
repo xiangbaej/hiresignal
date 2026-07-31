@@ -192,8 +192,15 @@ export function scoreLead(input: ScoringInput): ScoreBreakdown {
 
   // 아카이브가 ATS 게시일보다 60일 이상 오래되면 ATS가 게시일을 리셋한 것이다.
   // 실측 사례: ashby:ramp "Security Engineer, Cloud" — ATS 113일 vs 아카이브 1006일.
+  //
+  // evergreen 이면 이 신호도 함께 무효화한다. 상시 공고는 특정 자리를 채우려는 게
+  // 아니므로 게시일이 어떻게 움직였는지는 채용 실패의 증거가 아니다. 나이만 무효화하고
+  // 이 신호를 남겨두면 "General Application" 같은 인재풀 공고가 10점을 얻어 리드로
+  // 올라온다 — evergreen 필터를 우회하는 누출이다.
   const dateResetGap =
-    input.archiveAgeDays !== null && input.reportedAgeDays !== null
+    !evergreen.isEvergreen &&
+    input.archiveAgeDays !== null &&
+    input.reportedAgeDays !== null
       ? input.archiveAgeDays - input.reportedAgeDays
       : null;
 
@@ -217,7 +224,9 @@ export function scoreLead(input: ScoringInput): ScoreBreakdown {
         dateResetGap === null ? null : clamp01((dateResetGap - 60) / 305),
       detail:
         dateResetGap === null
-          ? '아카이브 증거 없음'
+          ? evergreen.isEvergreen
+            ? '상시 공고로 판정 — 제외'
+            : '아카이브 증거 없음'
           : dateResetGap <= 60
             ? '게시일 일관됨'
             : `ATS 게시일이 아카이브보다 ${dateResetGap}일 최신 — requisition 재활용 흔적`,

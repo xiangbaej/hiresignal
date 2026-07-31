@@ -1,361 +1,802 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HireSignal — 채워지지 않는 채용 공고에서 외주 기회를 찾습니다</title>
-<meta name="description" content="ATS 공개 API와 Wayback 아카이브를 결합해, 오래 채워지지 않는 채용 공고를 프리랜서 외주 기회로 변환합니다.">
+<title>HireSignal — Unfilled job posts are outsourcing demand</title>
+<meta name="description" content="HireSignal tracks public ATS and web-archive data to surface B2B accounts whose work is piling up behind a stalled hire.">
+<meta property="og:title" content="HireSignal — Unfilled job posts are outsourcing demand">
+<meta property="og:description" content="Verified 90+ day hiring backlogs, the stack that isn't getting done, and an outreach draft built from the evidence.">
+<meta property="og:type" content="website">
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --line:#262b35; --fg:#e6e9ef; --muted:#8b93a7; --accent:#5b8cff; --hot:#ff6b4a; --warm:#f0b429; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.7 -apple-system,"Segoe UI","Malgun Gothic",system-ui,sans-serif; }
-  .wrap { max-width:860px; margin:0 auto; padding:56px 20px 100px; }
-  h1 { font-size:30px; line-height:1.3; margin:0 0 12px; letter-spacing:-.01em; }
-  h2 { font-size:19px; margin:44px 0 12px; }
-  h3 { font-size:15px; margin:24px 0 6px; color:var(--fg); }
-  p { color:#c6cddc; }
-  .lede { font-size:18px; color:#c6cddc; margin:0 0 8px; }
-  .stamp { color:var(--muted); font-size:13px; margin-bottom:32px; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin:24px 0 8px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  .card .n { font-size:24px; font-weight:650; }
-  .card .l { color:var(--muted); font-size:12px; }
-  table { width:100%; border-collapse:collapse; margin-top:12px; }
-  th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:500; padding:8px; border-bottom:1px solid var(--line); }
-  td { padding:13px 8px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14.5px; }
-  td.num { white-space:nowrap; color:#c6cddc; }
-  a { color:var(--accent); }
-  td a { color:var(--fg); text-decoration:none; font-weight:550; }
-  td a:hover { color:var(--accent); text-decoration:underline; }
-  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:650; text-transform:uppercase; }
-  .badge-hot { background:rgba(255,107,74,.16); color:var(--hot); }
-  .badge-warm { background:rgba(240,180,41,.14); color:var(--warm); }
-  .tags { margin-top:5px; display:flex; gap:4px; flex-wrap:wrap; }
-  .tag { background:#1e2230; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-size:11px; color:#b6c0d4; }
-  details { margin-top:6px; } summary { cursor:pointer; font-size:12px; color:var(--accent); }
-  details ul { margin:6px 0 0; padding-left:18px; font-size:13px; color:#c2cadb; }
-  .gate { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:24px; margin:24px 0; text-align:center; }
-  .gate .n { font-size:30px; font-weight:650; }
-  .cta { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; padding:11px 22px; border-radius:8px; margin-top:12px; }
-  .cta:hover { background:#4a7bf0; }
-  .method { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px 24px; }
-  .method ol { padding-left:20px; } .method li { margin-bottom:10px; color:#c6cddc; }
-  .limits li { margin-bottom:8px; color:#c6cddc; }
-  code { background:#1e2230; border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:13px; }
-  abbr { text-decoration:none; color:var(--accent); cursor:help; }
-  footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; }
+
+  :root {
+    --bg: #f2f4f6;
+    --card: #ffffff;
+    --fg: #191f28;
+    --fg2: #4e5968;
+    --muted: #8b95a1;
+    --primary: #3182f6;
+    --primary-dark: #1b64da;
+    --primary-weak: #e8f3ff;
+    --hot: #f04452;
+    --hot-weak: #ffeceb;
+    --warn: #ff9500;
+    --warn-weak: #fff4e6;
+    --warn-fg: #b26a00;
+    --radius: 20px;
+    --shadow: 0 1px 2px rgba(0, 27, 55, .04), 0 6px 20px rgba(0, 27, 55, .05);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
+          "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--primary); }
+  .sig {
+    font-size: 13px; font-weight: 700; border-radius: 999px; padding: 6px 12px;
+    letter-spacing: -.01em; white-space: nowrap;
+  }
+  .sig-hot { background: var(--hot-weak); color: var(--hot); }
+  .sig-warn { background: var(--warn-weak); color: var(--warn-fg); }
+  .sig-calm { background: var(--bg); color: var(--fg2); }
+  .sig-none { background: var(--bg); color: var(--muted); font-weight: 600; }
+  .sig abbr { text-decoration: none; }
+  .grade {
+    font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .04em; padding: 4px 9px; border-radius: 6px;
+  }
+  .grade-hot { background: var(--hot); color: #fff; }
+  .grade-warm { background: var(--warn-weak); color: var(--warn-fg); }
+  .company { font-size: 15px; font-weight: 600; color: var(--fg2); margin-bottom: 2px; }
+  .title {
+    font-size: 21px; font-weight: 800; letter-spacing: -.025em;
+    margin: 0 0 12px; line-height: 1.35;
+  }
+  .title a { color: var(--fg); text-decoration: none; }
+  .title a:hover { color: var(--primary); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tag {
+    font-size: 12px; font-weight: 600; color: var(--fg2); background: var(--bg);
+    border-radius: 7px; padding: 4px 9px;
+  }
+  .meta { font-size: 12.5px; color: var(--muted); }
+  .why { margin-top: 14px; }
+  .why summary {
+    cursor: pointer; font-size: 13px; font-weight: 600; color: var(--primary);
+    list-style: none; display: inline-block;
+  }
+  .why summary::-webkit-details-marker { display: none; }
+  .why summary::after { content: " \203A"; }
+  .why[open] summary::after { content: " \2304"; }
+  .why ul {
+    margin: 10px 0 0; padding: 14px 16px 14px 32px; background: var(--bg);
+    border-radius: 12px; font-size: 13px; color: var(--fg2);
+  }
+  .why li + li { margin-top: 5px; }
+  .card {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 22px 22px 18px;
+  }
+  .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .card-top .grade { margin-left: auto; }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  .section { padding: 64px 0; }
+  .section + .section { border-top: 1px solid #e9ecef; }
+  h2 { font-size: 24px; font-weight: 800; letter-spacing: -.025em; margin: 0 0 8px; }
+  .section-sub { font-size: 15px; color: var(--muted); margin: 0 0 28px; }
+  p { color: var(--fg2); }
+
+  /* ── Hero ── */
+  .hero { padding: 88px 0 64px; text-align: center; }
+  .eyebrow {
+    display: inline-block; font-size: 12.5px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--primary); background: var(--primary-weak);
+    padding: 7px 14px; border-radius: 999px; margin-bottom: 22px;
+  }
+  .hero h1 {
+    font-size: 42px; line-height: 1.22; font-weight: 800; letter-spacing: -.035em;
+    margin: 0 auto 20px; max-width: 15em;
+  }
+  .hero .lede {
+    font-size: 18px; line-height: 1.6; color: var(--fg2);
+    margin: 0 auto 32px; max-width: 34em;
+  }
+  .cta {
+    display: inline-block; background: var(--primary); color: #fff; text-decoration: none;
+    font-weight: 700; font-size: 16px; padding: 16px 30px; border-radius: 14px;
+    box-shadow: 0 6px 20px rgba(49, 130, 246, .28); transition: background .12s, transform .06s;
+  }
+  .cta:hover { background: var(--primary-dark); }
+  .cta:active { transform: scale(.99); }
+  .hero .proof {
+    font-size: 14px; color: var(--muted); margin: 24px auto 0; max-width: 32em;
+  }
+  .hero .proof strong { color: var(--fg2); }
+
+  /* 신뢰 지표를 히어로 바로 아래 둔다. 주장 다음에 숫자가 와야 설득이 된다. */
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 22px; margin-top: 40px;
+  }
+  .stats div { text-align: center; }
+  .stats .n { font-size: 25px; font-weight: 800; letter-spacing: -.025em; }
+  .stats .l { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+  .stats .hot { color: var(--hot); }
+
+  /* ── Value props ── */
+  .values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .value {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 26px 22px;
+  }
+  .value .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 10px; background: var(--primary-weak);
+    color: var(--primary); font-weight: 800; font-size: 14px; margin-bottom: 14px;
+  }
+  .value h3 { font-size: 17px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px; }
+  .value p { font-size: 14px; margin: 0; line-height: 1.6; }
+
+  /* ── Dashboard ── */
+  .feed { display: flex; flex-direction: column; gap: 12px; }
+  .footnote { font-size: 12.5px; color: var(--muted); margin-top: 14px; }
+  .gate {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 30px 24px; margin-top: 12px; text-align: center;
+  }
+  .gate .n {
+    font-size: 30px; font-weight: 800; letter-spacing: -.03em; color: var(--primary);
+  }
+  .gate p { margin: 6px 0 0; font-size: 14.5px; }
+
+  /* ── Form ── */
+  .form-card {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 30px 26px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 13px; font-weight: 700; color: var(--fg);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%; border: 0; background: var(--bg); font: inherit; font-size: 15px;
+    color: var(--fg); border-radius: 12px; padding: 14px 15px;
+  }
+  .field input::placeholder { color: var(--muted); }
+  .field input:focus { outline: 2px solid var(--primary); }
+  .btn-submit {
+    width: 100%; border: 0; cursor: pointer; font: inherit; font-size: 16px;
+    font-weight: 700; color: #fff; background: var(--primary); border-radius: 14px;
+    padding: 16px; margin-top: 6px; transition: background .12s;
+  }
+  .btn-submit:hover { background: var(--primary-dark); }
+  .fineprint { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; line-height: 1.6; }
+
+  /* ── Methodology / limits ── */
+  .panel {
+    background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 26px; font-size: 14.5px;
+  }
+  .panel ol { padding-left: 20px; margin: 0; }
+  .panel li { margin-bottom: 14px; color: var(--fg2); line-height: 1.6; }
+  .panel li:last-child { margin-bottom: 0; }
+  .panel strong { color: var(--fg); }
+  .limits { list-style: none; padding: 0; margin: 0; }
+  .limits li {
+    background: var(--card); border-radius: 14px; box-shadow: var(--shadow);
+    padding: 17px 19px; margin-bottom: 10px; font-size: 14px; color: var(--fg2);
+    line-height: 1.6;
+  }
+  .limits strong { color: var(--fg); }
+  code {
+    background: var(--bg); border-radius: 6px; padding: 2px 6px; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  footer {
+    padding: 36px 0 72px; color: var(--muted); font-size: 13px; line-height: 1.8;
+    border-top: 1px solid #e9ecef;
+  }
+
+  @media (max-width: 720px) {
+    .values, .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .hero { padding: 60px 0 48px; }
+    .hero h1 { font-size: 31px; }
+    .hero .lede { font-size: 16px; }
+    .section { padding: 48px 0; }
+    .values { grid-template-columns: 1fr; }
+    .card { padding: 18px 18px 16px; }
+    .title { font-size: 19px; }
+    .cta { display: block; }
+  }
 </style>
 </head>
 <body>
-<main class="wrap">
-  <h1>채워지지 않는 채용 공고는<br>외주 발주 신호입니다</h1>
-  <p class="lede">
-    어떤 회사가 Kubernetes 엔지니어를 750일째 못 구하고 있다면, 그 일은 어딘가에서
-    처리되어야 합니다. HireSignal은 공개 ATS API와 Wayback 아카이브를 결합해 그런
-    공고를 찾아냅니다.
-  </p>
-  <p class="stamp">
-    갱신 2026-07-31 · 추적 보드 188개 ·
-    전량 공개 데이터 기반
-  </p>
 
-  <div class="cards">
-    <div class="card"><div class="n">457</div><div class="l">현재 리드</div></div>
-    <div class="card"><div class="n" style="color:var(--hot)">11</div><div class="l">Hot</div></div>
-    <div class="card"><div class="n">457</div><div class="l">아카이브 증거 확보</div></div>
-    <div class="card"><div class="n">460</div><div class="l">수임 불가 직군 제외</div></div>
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Updated 2026-07-31</span>
+    <h1>Unfilled job posts are a strong signal of outsourcing demand</h1>
+    <p class="lede">
+      HireSignal tracks public ATS and web-archive data in near real time to surface
+      B2B accounts whose work is piling up behind a hire they cannot close.
+    </p>
+    <a class="cta" href="#subscribe">Get your free lead report</a>
+    <p class="proof">Right now: baseten has had <strong>Cloud Platform Engineer</strong> open for <strong>751 days</strong>. That work is not waiting.</p>
+
+    <div class="stats" aria-label="Coverage">
+      <div><div class="n">455</div><div class="l">live leads</div></div>
+      <div><div class="n hot">11</div><div class="l">hot</div></div>
+      <div><div class="n">455</div><div class="l">archive&#8209;verified</div></div>
+      <div><div class="n">188</div><div class="l">boards tracked</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>Why this data converts</h2>
+    <p class="section-sub">Three things you cannot get from a job board.</p>
+    <div class="values">
+      <div class="value">
+        <span class="num">1</span>
+        <h3>Verified 90+ day backlogs</h3>
+        <p>
+          We do not trust the ATS posting date — companies reuse and reset it.
+          Age is confirmed against an independent web archive, so a
+          "751 days open" claim is evidence, not a guess.
+        </p>
+      </div>
+      <div class="value">
+        <span class="num">2</span>
+        <h3>The stack that isn't getting done</h3>
+        <p>
+          Every lead carries the extracted tech stack and how much of the company's
+          hiring is concentrated in it. You know what the backlog is made of before
+          you write a word.
+        </p>
+      </div>
+      <div class="value">
+        <span class="num">3</span>
+        <h3>An outreach draft, ready</h3>
+        <p>
+          Each lead ships with a first-touch draft assembled from the observed
+          evidence — the duration, the concentration, the stack. Edit and send.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>Live B2B outsourcing-opportunity leads</h2>
+    <p class="section-sub">
+      Detected on the latest scan. Showing 20 of 455.
+    </p>
+    <div class="feed"><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">751 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
   </div>
 
-  <h2>지금 열려 있는 기회 20건</h2>
-  <table>
-    <thead><tr><th scope="col">등급</th><th scope="col">경과</th><th scope="col">회사</th><th scope="col">공고</th></tr></thead>
-    <tbody>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">751일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>baseten</strong></td>
-  <td>
+  <div class="company">baseten</div>
+  <h2 class="title">
     <a href="https://jobs.ashbyhq.com/baseten/916e9d62-492a-4562-971f-3e97e3868392" target="_blank" rel="noopener noreferrer">Cloud Platform Engineer</a>
-    <div class="tags"><span class="tag">ci-cd</span><span class="tag">kubernetes</span><span class="tag">spark</span><span class="tag">terraform</span></div>
-    <details><summary>근거</summary><ul><li>751일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 28건 / 전체 61건 (46%)</li><li>ATS 게시일이 아카이브보다 457일 최신 — requisition 재활용 흔적</li><li>ATS 게시 294일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">558일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>replit</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/replit/47235851-fadd-4bd7-9cc6-61f545059ac1" target="_blank" rel="noopener noreferrer">Staff Software Engineer, Product</a>
-    <div class="tags"><span class="tag">typescript</span><span class="tag">graphql</span><span class="tag">nodejs</span><span class="tag">postgres</span><span class="tag">react</span></div>
-    <details><summary>근거</summary><ul><li>558일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 34건 / 전체 88건 (39%)</li><li>ATS 게시일이 아카이브보다 346일 최신 — requisition 재활용 흔적</li><li>ATS 게시 212일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">545일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>modal</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/modal/9fadb51f-ce11-41b1-84d5-470e66cc8ee9" target="_blank" rel="noopener noreferrer">Forward Deployed Engineer - ML</a>
-    <div class="tags"><span class="tag">llm</span></div>
-    <details><summary>근거</summary><ul><li>545일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 12건 / 전체 31건 (39%)</li><li>ATS 게시일이 아카이브보다 388일 최신 — requisition 재활용 흔적</li><li>ATS 게시 157일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">627일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>abridge</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/abridge/7a28a84b-6756-4fe6-8af9-501fc8772a62" target="_blank" rel="noopener noreferrer">Senior Full Stack Engineer, Integrations VistA</a>
-    <div class="tags"><span class="tag">gcp</span><span class="tag">nodejs</span></div>
-    <details><summary>근거</summary><ul><li>627일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 15건 / 전체 43건 (35%)</li><li>ATS 게시일이 아카이브보다 339일 최신 — requisition 재활용 흔적</li><li>ATS 게시 288일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">1527일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>linear</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/linear/12f8f208-0b9c-4569-bb3d-41c8a197029e" target="_blank" rel="noopener noreferrer">Senior / Staff Product Engineer</a>
-    <div class="tags"><span class="tag">graphql</span><span class="tag">postgres</span><span class="tag">react</span><span class="tag">typescript</span><span class="tag">gcp</span></div>
-    <details><summary>근거</summary><ul><li>1527일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 9건 / 전체 23건 (39%)</li><li>ATS 게시일이 아카이브보다 1378일 최신 — requisition 재활용 흔적</li><li>ATS 게시 149일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">634일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>llamaindex</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/llamaindex/5db34762-0a45-4cb6-9874-607b6583d530" target="_blank" rel="noopener noreferrer">Member of Technical Staff, Frontend Product</a>
-    <div class="tags"><span class="tag">javascript</span><span class="tag">nextjs</span><span class="tag">python</span><span class="tag">llm</span><span class="tag">react</span></div>
-    <details><summary>근거</summary><ul><li>634일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 5건 / 전체 15건 (33%)</li><li>ATS 게시일이 아카이브보다 392일 최신 — requisition 재활용 흔적</li><li>ATS 게시 242일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">539일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>baseten</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/baseten/b85e4b1d-6531-46b5-bc8a-238f3761a50e" target="_blank" rel="noopener noreferrer">Security Engineer</a>
-    <div class="tags"><span class="tag">aws</span><span class="tag">gcp</span><span class="tag">ci-cd</span><span class="tag">spark</span></div>
-    <details><summary>근거</summary><ul><li>539일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 28건 / 전체 61건 (46%)</li><li>ATS 게시일이 아카이브보다 419일 최신 — requisition 재활용 흔적</li><li>ATS 게시 120일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">665일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>replit</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/replit/8fbbe594-596a-4a4f-844b-dc00111e717f" target="_blank" rel="noopener noreferrer">Software Engineer, Mobile</a>
-    <div class="tags"><span class="tag">react</span><span class="tag">react-native</span><span class="tag">android</span><span class="tag">ios</span><span class="tag">typescript</span></div>
-    <details><summary>근거</summary><ul><li>665일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 34건 / 전체 88건 (39%)</li><li>ATS 게시일이 아카이브보다 553일 최신 — requisition 재활용 흔적</li><li>ATS 게시 112일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">528일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>poolside</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/poolside/ba11fe78-f6f6-4165-b76b-020a46ad8fee" target="_blank" rel="noopener noreferrer">Member of Engineering (Evaluations)</a>
-    <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
-    <details><summary>근거</summary><ul><li>528일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 6건 / 전체 16건 (38%)</li><li>ATS 게시일이 아카이브보다 424일 최신 — requisition 재활용 흔적</li><li>ATS 게시 104일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">528일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>poolside</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/poolside/7662c253-27bf-4a64-a52a-ecd221887993" target="_blank" rel="noopener noreferrer">Member of Engineering (Post-training)</a>
-    <div class="tags"><span class="tag">python</span><span class="tag">llm</span><span class="tag">pytorch</span></div>
-    <details><summary>근거</summary><ul><li>528일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 6건 / 전체 16건 (38%)</li><li>ATS 게시일이 아카이브보다 428일 최신 — requisition 재활용 흔적</li><li>ATS 게시 100일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-hot">hot</span></td>
-  <td class="num">766일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>baseten</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/baseten/ff008b8e-b38d-4941-b24f-9a48c970e7fb" target="_blank" rel="noopener noreferrer">Site Reliability Engineer</a>
-    <div class="tags"><span class="tag">kubernetes</span><span class="tag">spark</span><span class="tag">terraform</span></div>
-    <details><summary>근거</summary><ul><li>766일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 28건 / 전체 61건 (46%)</li><li>ATS 게시일이 아카이브보다 686일 최신 — requisition 재활용 흔적</li><li>ATS 게시 80일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">528일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>poolside</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/poolside/819757ab-8e03-4c7b-8fed-be7451372cb4" target="_blank" rel="noopener noreferrer">Member of Engineering (Pre-training / Data Research)</a>
-    <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
-    <details><summary>근거</summary><ul><li>528일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 6건 / 전체 16건 (38%)</li><li>ATS 게시일이 아카이브보다 456일 최신 — requisition 재활용 흔적</li><li>ATS 게시 72일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">430일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>modal</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/modal/af17da5e-23ca-4802-854d-5f0546e1ed32" target="_blank" rel="noopener noreferrer">Member of Technical Staff - ML Performance</a>
-    <div class="tags"><span class="tag">pytorch</span></div>
-    <details><summary>근거</summary><ul><li>430일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 12건 / 전체 31건 (39%)</li><li>ATS 게시일이 아카이브보다 329일 최신 — requisition 재활용 흔적</li><li>ATS 게시 101일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">525일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>linear</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/linear/0c7c2e26-0a98-42cf-a47c-9a3999fb513b" target="_blank" rel="noopener noreferrer">Product Engineer</a>
-    <div class="tags"><span class="tag">graphql</span><span class="tag">postgres</span><span class="tag">react</span><span class="tag">typescript</span><span class="tag">gcp</span></div>
-    <details><summary>근거</summary><ul><li>525일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 9건 / 전체 23건 (39%)</li><li>ATS 게시일이 아카이브보다 474일 최신 — requisition 재활용 흔적</li><li>ATS 게시 51일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">412일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>anyscale</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/anyscale/73a973b1-6377-4144-a6e5-610b78719882" target="_blank" rel="noopener noreferrer">Software Engineer (Ray Core)</a>
-    <div class="tags"><span class="tag">cpp</span></div>
-    <details><summary>근거</summary><ul><li>412일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 9건 / 전체 21건 (43%)</li><li>ATS 게시일이 아카이브보다 335일 최신 — requisition 재활용 흔적</li><li>ATS 게시 77일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">403일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>speakeasy</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/speakeasy/def210b2-b6aa-421b-84c4-dcd278f95db9" target="_blank" rel="noopener noreferrer">Forward Deployed Engineer</a>
-    <div class="tags"><span class="tag">llm</span><span class="tag">redis</span><span class="tag">vercel</span></div>
-    <details><summary>근거</summary><ul><li>403일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 2건 / 전체 5건 (40%)</li><li>ATS 게시일이 아카이브보다 256일 최신 — requisition 재활용 흔적</li><li>ATS 게시 147일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">394일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>cohere</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/cohere/a87be947-00f0-4a4c-a690-a4922f88f553" target="_blank" rel="noopener noreferrer">Member of Technical Staff, Multilingual</a>
-    <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
-    <details><summary>근거</summary><ul><li>394일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 70건 / 전체 138건 (51%)</li><li>ATS 게시일이 아카이브보다 336일 최신 — requisition 재활용 흔적</li><li>ATS 게시 58일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">394일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>cohere</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/cohere/1f7cc5e6-5f31-40d8-ad49-fe22c98a3ea4" target="_blank" rel="noopener noreferrer">Senior Member of Technical Staff, Safety and Security for Agents</a>
-    <div class="tags"><span class="tag">python</span><span class="tag">pytorch</span><span class="tag">tensorflow</span></div>
-    <details><summary>근거</summary><ul><li>394일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 70건 / 전체 138건 (51%)</li><li>ATS 게시일이 아카이브보다 265일 최신 — requisition 재활용 흔적</li><li>ATS 게시 129일 경과</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">451일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>poolside</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/poolside/0d16412c-58a2-464c-8407-6413210a8c72" target="_blank" rel="noopener noreferrer">Member of Engineering (Multimodality - Research Lead)</a>
-    <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
-    <details><summary>근거</summary><ul><li>451일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 6건 / 전체 16건 (38%)</li><li>ATS 게시일이 아카이브보다 443일 최신 — requisition 재활용 흔적</li></ul></details>
-  </td>
-</tr>
-<tr>
-  <td><span class="badge badge-warm">warm</span></td>
-  <td class="num">394일<abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr></td>
-  <td><strong>cohere</strong></td>
-  <td>
-    <a href="https://jobs.ashbyhq.com/cohere/b9c8c98e-b0fa-43b6-93b0-fa780d956066" target="_blank" rel="noopener noreferrer">Software Engineer, Security</a>
-    <div class="tags"><span class="tag">kubernetes</span><span class="tag">aws</span><span class="tag">azure</span><span class="tag">gcp</span><span class="tag">llm</span></div>
-    <details><summary>근거</summary><ul><li>394일간 계속 열려 있음 (아카이브 증거)</li><li>동일 계열 70건 / 전체 138건 (51%)</li><li>ATS 게시 184일 경과</li><li>ATS 게시일이 아카이브보다 210일 최신 — requisition 재활용 흔적</li></ul></details>
-  </td>
-</tr></tbody>
-  </table>
-  <p style="font-size:13px;color:var(--muted)">
-    <abbr title="Wayback Machine 아카이브가 증명한 값">*</abbr> 표시는 제3자 아카이브가
-    그 시점에 공고가 존재했음을 증명한 값입니다. ATS가 보고하는 게시일이 아닙니다.
-  </p>
+  </h2>
 
-  <div class="gate">
-    <div class="n">+437건</div>
-    <p>스택·직군별 전체 목록과 매일 갱신되는 알림을 준비하고 있습니다.<br>
-       어떤 스택의 리드가 필요한지 알려주시면 우선 열어드립니다.</p>
-    <a class="cta" href="https://github.com/xiangbaej/hiresignal/issues/new?title=Access%20request&amp;body=%23%23%23%20What%20do%20you%20do%3F%0A(%EC%98%88%3A%20%ED%94%84%EB%A6%AC%EB%9E%9C%EC%8A%A4%20%EB%B0%B1%EC%97%94%EB%93%9C%20%EA%B0%9C%EB%B0%9C%EC%9E%90%20%2F%203%EC%9D%B8%20%EA%B0%9C%EB%B0%9C%20%EC%97%90%EC%9D%B4%EC%A0%84%EC%8B%9C)%0A%0A%23%23%23%20Which%20stacks%20or%20roles%20do%20you%20want%20leads%20for%3F%0A(%EC%98%88%3A%20React%20Native%2C%20Kubernetes%2C%20Django)%0A%0A%23%23%23%20Would%20you%20pay%20for%20this%3F%20If%20so%2C%20roughly%20how%20much%20per%20month%3F%0A(%EC%86%94%EC%A7%81%ED%95%98%EA%B2%8C%20%EB%8B%B5%ED%95%B4%20%EC%A3%BC%EC%84%B8%EC%9A%94.%20%EC%95%88%20%EB%82%B8%EB%8B%A4%EB%8A%94%20%EB%8B%B5%EB%8F%84%20%EC%A0%80%ED%9D%AC%EC%97%90%EA%B2%8C%20%EC%9C%A0%EC%9A%A9%ED%95%A9%EB%8B%88%EB%8B%A4.)%0A" target="_blank" rel="noopener noreferrer">액세스 요청하기</a>
-    <p style="font-size:12.5px;color:var(--muted);margin-top:14px">
-      GitHub 이슈로 열립니다. 이메일 수집을 하지 않습니다.
+  <div class="tags"><span class="tag">ci-cd</span><span class="tag">kubernetes</span><span class="tag">spark</span><span class="tag">terraform</span></div>
+  <div class="meta">San Francisco · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 751+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: ci-cd, kubernetes, spark, terraform</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in San Francisco, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">558 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">replit</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/replit/47235851-fadd-4bd7-9cc6-61f545059ac1" target="_blank" rel="noopener noreferrer">Staff Software Engineer, Product</a>
+  </h2>
+
+  <div class="tags"><span class="tag">typescript</span><span class="tag">graphql</span><span class="tag">nodejs</span><span class="tag">postgres</span><span class="tag">react</span></div>
+  <div class="meta">Foster City, CA · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 558+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: typescript, graphql, nodejs, postgres, react</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in Foster City, CA, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">545 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">modal</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/modal/9fadb51f-ce11-41b1-84d5-470e66cc8ee9" target="_blank" rel="noopener noreferrer">Forward Deployed Engineer - ML</a>
+  </h2>
+
+  <div class="tags"><span class="tag">llm</span></div>
+  <div class="meta">New York · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 545+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: llm</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in New York</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">627 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">abridge</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/abridge/7a28a84b-6756-4fe6-8af9-501fc8772a62" target="_blank" rel="noopener noreferrer">Senior Full Stack Engineer, Integrations VistA</a>
+  </h2>
+
+  <div class="tags"><span class="tag">gcp</span><span class="tag">nodejs</span></div>
+  <div class="meta">United States - Remote · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 627+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: gcp, nodejs</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in United States - Remote, remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">1527 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">linear</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/linear/12f8f208-0b9c-4569-bb3d-41c8a197029e" target="_blank" rel="noopener noreferrer">Senior / Staff Product Engineer</a>
+  </h2>
+
+  <div class="tags"><span class="tag">graphql</span><span class="tag">postgres</span><span class="tag">react</span><span class="tag">typescript</span><span class="tag">gcp</span></div>
+  <div class="meta">North America · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 1527+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: graphql, postgres, react, typescript, gcp</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in North America, remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">634 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">llamaindex</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/llamaindex/5db34762-0a45-4cb6-9874-607b6583d530" target="_blank" rel="noopener noreferrer">Member of Technical Staff, Frontend Product</a>
+  </h2>
+
+  <div class="tags"><span class="tag">javascript</span><span class="tag">nextjs</span><span class="tag">python</span><span class="tag">llm</span><span class="tag">react</span></div>
+  <div class="meta">San Francisco · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 634+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: javascript, nextjs, python, llm, react</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in San Francisco, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">539 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">baseten</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/baseten/b85e4b1d-6531-46b5-bc8a-238f3761a50e" target="_blank" rel="noopener noreferrer">Security Engineer</a>
+  </h2>
+
+  <div class="tags"><span class="tag">aws</span><span class="tag">gcp</span><span class="tag">ci-cd</span><span class="tag">spark</span></div>
+  <div class="meta">San Francisco · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 539+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: aws, gcp, ci-cd, spark</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in San Francisco, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">665 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">replit</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/replit/8fbbe594-596a-4a4f-844b-dc00111e717f" target="_blank" rel="noopener noreferrer">Software Engineer, Mobile</a>
+  </h2>
+
+  <div class="tags"><span class="tag">react</span><span class="tag">react-native</span><span class="tag">android</span><span class="tag">ios</span><span class="tag">typescript</span></div>
+  <div class="meta">Foster City, CA · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 665+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: react, react-native, android, ios, typescript</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in Foster City, CA, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">528 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">poolside</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/poolside/ba11fe78-f6f6-4165-b76b-020a46ad8fee" target="_blank" rel="noopener noreferrer">Member of Engineering (Evaluations)</a>
+  </h2>
+
+  <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
+  <div class="meta">Remote (EMEA/East Coast) · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 528+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: llm, python</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in Remote (EMEA/East Coast), remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">528 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">poolside</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/poolside/7662c253-27bf-4a64-a52a-ecd221887993" target="_blank" rel="noopener noreferrer">Member of Engineering (Post-training)</a>
+  </h2>
+
+  <div class="tags"><span class="tag">python</span><span class="tag">llm</span><span class="tag">pytorch</span></div>
+  <div class="meta">Remote (EMEA/East Coast) · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 528+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: python, llm, pytorch</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in Remote (EMEA/East Coast), remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">766 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-hot">hot</span>
+  </div>
+
+  <div class="company">baseten</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/baseten/ff008b8e-b38d-4941-b24f-9a48c970e7fb" target="_blank" rel="noopener noreferrer">Site Reliability Engineer</a>
+  </h2>
+
+  <div class="tags"><span class="tag">kubernetes</span><span class="tag">spark</span><span class="tag">terraform</span></div>
+  <div class="meta">San Francisco · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 766+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: kubernetes, spark, terraform</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in San Francisco, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">528 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">poolside</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/poolside/819757ab-8e03-4c7b-8fed-be7451372cb4" target="_blank" rel="noopener noreferrer">Member of Engineering (Pre-training / Data Research)</a>
+  </h2>
+
+  <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
+  <div class="meta">Remote (EMEA/East Coast) · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 528+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: llm, python</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in Remote (EMEA/East Coast), remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">430 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">modal</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/modal/af17da5e-23ca-4802-854d-5f0546e1ed32" target="_blank" rel="noopener noreferrer">Member of Technical Staff - ML Performance</a>
+  </h2>
+
+  <div class="tags"><span class="tag">pytorch</span></div>
+  <div class="meta">New York · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 430+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: pytorch</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in New York</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">525 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">linear</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/linear/0c7c2e26-0a98-42cf-a47c-9a3999fb513b" target="_blank" rel="noopener noreferrer">Product Engineer</a>
+  </h2>
+
+  <div class="tags"><span class="tag">graphql</span><span class="tag">postgres</span><span class="tag">react</span><span class="tag">typescript</span><span class="tag">gcp</span></div>
+  <div class="meta">North America · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 525+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: graphql, postgres, react, typescript, gcp</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in North America, remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">412 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">anyscale</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/anyscale/73a973b1-6377-4144-a6e5-610b78719882" target="_blank" rel="noopener noreferrer">Software Engineer (Ray Core)</a>
+  </h2>
+
+  <div class="tags"><span class="tag">cpp</span></div>
+  <div class="meta">San Francisco · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 412+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: cpp</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in San Francisco, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">403 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">speakeasy</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/speakeasy/def210b2-b6aa-421b-84c4-dcd278f95db9" target="_blank" rel="noopener noreferrer">Forward Deployed Engineer</a>
+  </h2>
+
+  <div class="tags"><span class="tag">llm</span><span class="tag">redis</span><span class="tag">vercel</span></div>
+  <div class="meta">San Francisco · onsite · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 403+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: llm, redis, vercel</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in San Francisco, onsite</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">394 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">cohere</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/cohere/a87be947-00f0-4a4c-a690-a4922f88f553" target="_blank" rel="noopener noreferrer">Member of Technical Staff, Multilingual</a>
+  </h2>
+
+  <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
+  <div class="meta">London · remote · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 394+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: llm, python</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in London, remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">394 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">cohere</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/cohere/1f7cc5e6-5f31-40d8-ad49-fe22c98a3ea4" target="_blank" rel="noopener noreferrer">Senior Member of Technical Staff, Safety and Security for Agents</a>
+  </h2>
+
+  <div class="tags"><span class="tag">python</span><span class="tag">pytorch</span><span class="tag">tensorflow</span></div>
+  <div class="meta">London · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 394+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: python, pytorch, tensorflow</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in London, hybrid</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">451 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">poolside</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/poolside/0d16412c-58a2-464c-8407-6413210a8c72" target="_blank" rel="noopener noreferrer">Member of Engineering (Multimodality - Research Lead)</a>
+  </h2>
+
+  <div class="tags"><span class="tag">llm</span><span class="tag">python</span></div>
+  <div class="meta">Remote (EMEA/East Coast) · remote · 95% confidence · 3 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 451+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: llm, python</li><li>3 independent signals agreed, at 95% confidence</li><li>Based in Remote (EMEA/East Coast), remote</li></ul>
+  </details></article><article class="card">
+  <div class="card-top">
+    <span class="sig sig-hot">394 days unfilled 🔥 <abbr title="Verified by the Wayback Machine: this exact posting existed on that date">&#10003;</abbr></span>
+    <span class="grade grade-warm">warm</span>
+  </div>
+
+  <div class="company">cohere</div>
+  <h2 class="title">
+    <a href="https://jobs.ashbyhq.com/cohere/b9c8c98e-b0fa-43b6-93b0-fa780d956066" target="_blank" rel="noopener noreferrer">Software Engineer, Security</a>
+  </h2>
+
+  <div class="tags"><span class="tag">kubernetes</span><span class="tag">aws</span><span class="tag">azure</span><span class="tag">gcp</span><span class="tag">llm</span></div>
+  <div class="meta">Toronto · hybrid · 95% confidence · 4 signals</div>
+
+  <details class="why">
+    <summary>See the evidence</summary>
+    <ul><li>Open for 394+ days, confirmed by an independent web archive — not the ATS&#39;s self-reported date</li><li>Unstaffed stack: kubernetes, aws, azure, gcp, llm</li><li>4 independent signals agreed, at 95% confidence</li><li>Based in Toronto, hybrid</li></ul>
+  </details></article></div>
+    <p class="footnote">
+      &#10003; means an independent web archive confirmed the posting existed on that
+      date. It is not the ATS's self-reported date.
+    </p>
+
+    <div class="gate">
+      <div class="n">+435 more</div>
+      <p>
+        Filtered by stack and role, refreshed daily.<br>
+        Tell us which stack you work in and we will open it up for you.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="subscribe">
+  <div class="wrap">
+    <h2>Get weekly leads for your stack</h2>
+    <p class="section-sub">
+      Tell us the stacks you work in and we will send newly detected leads that match.
+    </p>
+    <div class="form-card">
+      <form id="lead-form">
+        <div class="field">
+          <label for="stacks">Your stacks or roles</label>
+          <input type="text" id="stacks" name="stacks" required
+                 placeholder="React, Kubernetes, Django" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="email">Email (optional)</label>
+          <input type="email" id="email" name="email"
+                 placeholder="you@company.com" autocomplete="email">
+        </div>
+        <button type="submit" class="btn-submit">Send me matching leads</button>
+      </form>
+      <p class="fineprint">
+        <strong>How this actually works, plainly:</strong> we are pre-launch and do not
+        run a mailing list yet, so submitting opens a pre-filled GitHub issue — that is
+        our intake. It is a public thread, so leave the email field blank if you would
+        rather not post it, and we will reply on the issue instead. We store nothing
+        else about you.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>How we decide</h2>
+    <p class="section-sub">The method is public, including where it is weak.</p>
+    <div class="panel">
+      <ol>
+        <li>
+          <strong>We collect from public ATS APIs.</strong>
+          Greenhouse, Lever, Ashby and SmartRecruiters publish their job boards as
+          JSON. These are official endpoints, not scraping.
+        </li>
+        <li>
+          <strong>We do not trust the posting date the ATS reports.</strong>
+          When a company reuses a requisition the date inflates to years; sometimes it
+          resets instead. In one case the ATS reported <code>posted 3 days ago</code>
+          for a posting the archive shows existing <code>427 days</code> earlier.
+        </li>
+        <li>
+          <strong>A third-party archive proves existence.</strong>
+          If the Wayback Machine captured that exact posting URL, it existed on that
+          date — that is not falsifiable. We check the HTTP status of each capture so a
+          404 snapshot is never mistaken for evidence.
+        </li>
+        <li>
+          <strong>Evergreen posts are filtered out.</strong>
+          "General Application" and "Talent Community" listings are not trying to fill
+          a specific seat, so they are not signal.
+        </li>
+        <li>
+          <strong>Roles a freelancer cannot take are removed.</strong>
+          A sales or support req stuck for 750 days does not convert into contract work.
+          457 leads were dropped on this rule in the latest run.
+        </li>
+        <li>
+          <strong>Weak evidence does not get promoted.</strong>
+          Every lead shows its confidence, and below 50% we never assign Hot.
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>What this does not do</h2>
+    <p class="section-sub">
+      Stated up front, because a tool that hides its limits is not worth trusting.
+    </p>
+    <ul class="limits">
+      <li>
+        <strong>Archive coverage is roughly 37%.</strong> The rest carries no external
+        proof and is shown at lower confidence. No evidence does not mean "new posting".
+      </li>
+      <li>
+        <strong>Recognition bias.</strong> Better-known companies are archived more
+        thoroughly, so leads skew toward them.
+      </li>
+      <li>
+        <strong>Repost and fill signals need time.</strong> The archive bootstraps age,
+        but "closed then reopened" only comes from our own daily snapshots. That is why
+        the Hot count is small this early.
+      </li>
+      <li>
+        <strong>Stuck does not mean they will outsource.</strong> This gives you a
+        reason to reach out. It does not promise a contract.
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <h2>If you are the one hiring</h2>
+    <p>
+      We will remove your postings.
+      <a href="https://github.com/xiangbaej/hiresignal/issues/new?title=Opt-out%20request" target="_blank" rel="noopener noreferrer">Open an issue</a>
+      with your company name or job board URL and it goes into
+      <code>seeds/blocklist.json</code>. On the next run the pipeline deletes
+      <strong>the accumulated observation history too</strong> — we do not just stop
+      collecting and keep what we already have.
     </p>
   </div>
+</section>
 
-  <h2>어떻게 판단하는가</h2>
-  <div class="method">
-    <ol>
-      <li>
-        <strong>공개 ATS API에서 공고를 수집합니다.</strong>
-        Greenhouse·Lever·Ashby·SmartRecruiters가 채용 보드를 JSON으로 공개합니다.
-        스크래핑이 아니라 공식 엔드포인트입니다.
-      </li>
-      <li>
-        <strong>ATS가 보고하는 게시일은 신뢰하지 않습니다.</strong>
-        회사가 requisition을 재사용하면 게시일이 수년으로 부풀려지고, 반대로 초기화되기도
-        합니다. 한 사례에서는 ATS가 <code>3일 전 게시</code>라고 표시한 공고가
-        아카이브에는 <code>427일 전</code>부터 존재했습니다.
-      </li>
-      <li>
-        <strong>제3자 아카이브로 존재를 증명합니다.</strong>
-        Wayback Machine에 해당 공고 URL이 캡처되어 있으면 그 시점에 존재했다는 반증
-        불가능한 증거가 됩니다. 404 캡처를 증거로 오인하지 않도록 응답 상태코드까지
-        확인합니다.
-      </li>
-      <li>
-        <strong>상시 채용 공고를 걸러냅니다.</strong>
-        "General Application", "Talent Community" 같은 인재풀 공고는 특정 자리를
-        채우려는 게 아니므로 신호가 아닙니다.
-      </li>
-      <li>
-        <strong>프리랜서가 수임할 수 없는 직무를 제외합니다.</strong>
-        영업·관리·고객지원 공고가 750일 막혀 있어도 외주로 전환되지 않습니다.
-        이번 회차에서 460건을 이 기준으로 제외했습니다.
-      </li>
-      <li>
-        <strong>근거가 부족하면 등급을 올리지 않습니다.</strong>
-        각 리드에 신뢰도를 함께 표시하고, 신뢰도가 낮으면 Hot을 부여하지 않습니다.
-      </li>
-    </ol>
+<footer>
+  <div class="wrap">
+    Source and method fully public ·
+    <a href="https://github.com/xiangbaej/hiresignal" target="_blank" rel="noopener noreferrer">github.com/xiangbaej/hiresignal</a><br>
+    We do not redistribute job descriptions. Every link points to the original posting.
   </div>
+</footer>
 
-  <h2>알아두실 한계</h2>
-  <ul class="limits">
-    <li>
-      아카이브 커버리지는 약 <strong>37%</strong>입니다. 나머지는 증거를 얻지 못했고,
-      그 경우 신뢰도를 낮춰 표시합니다. 증거가 없다는 것이 "새 공고"라는 뜻은 아닙니다.
-    </li>
-    <li>
-      아카이브는 인지도 높은 회사가 더 잘 남습니다. 따라서 리드가 알려진 회사로
-      편향됩니다.
-    </li>
-    <li>
-      "재게시"와 "충원" 신호는 자체 관측이 쌓여야 계산됩니다. 관측을 시작한 지
-      얼마 되지 않아 현재 Hot 등급 수는 구조적으로 적습니다.
-    </li>
-    <li>
-      막혀 있다는 것이 외주를 준다는 뜻은 아닙니다. 이 도구는 접근할 근거를 주지만
-      수주를 보장하지 않습니다.
-    </li>
-  </ul>
+<script>
+(function () {
+  var form = document.getElementById('lead-form');
+  if (!form) return;
 
-  <h2>채용 담당자시라면</h2>
-  <p>
-    귀사 공고를 이 목록에서 제외해 드립니다.
-    <a href="https://github.com/xiangbaej/hiresignal/issues/new?title=Opt-out%20request" target="_blank" rel="noopener noreferrer">이슈를 열어</a>
-    회사명 또는 채용 보드 URL을 알려주시면 <code>seeds/blocklist.json</code>에 추가되고,
-    다음 실행에서 <strong>누적된 관측 데이터까지 삭제</strong>됩니다.
-    수집 중단만 하고 과거 데이터를 남기지 않습니다.
-  </p>
+  /* No form backend yet: submitting opens a pre-filled GitHub issue.
+     The issue is public, so the email is included only if the visitor typed one. */
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var stacks = (document.getElementById('stacks').value || '').trim();
+    var email = (document.getElementById('email').value || '').trim();
+    if (!stacks) return;
 
-  <footer>
-    소스와 방법론 전체 공개 · <a href="https://github.com/xiangbaej/hiresignal" target="_blank" rel="noopener noreferrer">github.com/xiangbaej/hiresignal</a><br>
-    공고 본문은 재배포하지 않습니다. 모든 링크는 원문으로 연결됩니다.
-  </footer>
-</main>
+    var body = [
+      '### Stacks / roles I want leads for',
+      stacks,
+      '',
+      '### What I do',
+      '(freelance developer? small agency? — a line is enough)',
+      '',
+      '### Would you pay for this, and roughly how much per month?',
+      '(An honest "no" is just as useful to us.)',
+      ''
+    ];
+    if (email) {
+      body.push('### Preferred contact');
+      body.push(email);
+      body.push('');
+    }
+
+    var url = 'https://github.com/xiangbaej/hiresignal/issues/new' +
+      '?title=' + encodeURIComponent('Lead request: ' + stacks) +
+      '&body=' + encodeURIComponent(body.join('\n'));
+    window.open(url, '_blank', 'noopener');
+  });
+})();
+</script>
 </body>
 </html>

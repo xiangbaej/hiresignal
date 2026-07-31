@@ -9,6 +9,16 @@
 # 스캔 결과(data/)를 리포지토리에 커밋해서 다음 실행이 이어받는다. 규모가
 # 커지면(수십만 공고) Postgres로 옮겨야 하지만, 초기에는 이 방식이 인프라 비용
 # 0원이면서 감사 이력이 git 히스토리로 남는 장점이 있다.
+#
+# Pages 배포:
+# 별도 워크플로우가 필요하지 않다. Pages 소스가 "Deploy from a branch"(main /docs)
+# 이므로 GitHub 내장 빌더가 docs/ 변경을 감지해 배포한다.
+#
+# 주의할 만한 점: 보통 GITHUB_TOKEN 으로 만든 푸시는 다른 워크플로우를 트리거하지
+# 않는다(재귀 방지). 그런데 내장 Pages 빌더는 워크플로우가 아니라 GitHub App 이라
+# 이 제약을 받지 않는다. 실측 확인: 봇 커밋 d9e9ec9 가 pages build and deployment
+# 를 트리거해 success 로 완료했다. 따라서 아래 커밋 스텝이 docs/ 를 갱신하면
+# 사이트도 자동으로 갱신된다.
 
 name: Daily ATS Scan
 
