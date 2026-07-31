@@ -72,8 +72,12 @@ jobs:
           SCAN_TIMEOUT_MS: '30000'
         run: npx tsx src/pipeline/scan.ts --report --export
 
-      # 사람이 볼 수 있는 산출물. 정적 단일 파일이므로 GitHub Pages나 첨부로
-      # 그대로 쓸 수 있고, 이후 웹앱의 화면 명세 역할도 한다.
+      # 두 개의 산출물을 만든다.
+      #   data/report.html  내부용 전체 목록
+      #   docs/index.html   공개용 티저 (GitHub Pages)
+      #
+      # 공개 페이지가 검증 장치다. 아웃바운드로 프리랜서에게 물어볼 수 없는 상황이라
+      # 공개해 두고 액세스 요청(GitHub Issue) 수로 수요를 측정한다.
       - name: HTML 리포트 생성
         run: npx tsx src/pipeline/report-html.ts
 
@@ -81,7 +85,7 @@ jobs:
         run: |
           git config user.name  "hiresignal-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data/
+          git add data/ docs/
           # 변경이 없으면 커밋을 만들지 않는다 (빈 커밋으로 히스토리 오염 방지)
           if git diff --staged --quiet; then
             echo "변경 없음 — 커밋 생략"

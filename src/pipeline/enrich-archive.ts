@@ -67,9 +67,18 @@ interface CdxProbe {
  */
 async function probeUrl(jobUrl: string): Promise<CdxProbe | null> {
   const normalized = jobUrl.replace(/^https?:\/\//, '');
+  // statuscode를 함께 가져오는 것이 중요하다.
+  //
+  // Wayback은 404·410 응답도 캡처한다. 크롤러가 존재하지 않는 URL을 방문했다면
+  // "404 페이지의 스냅샷"이 남고, 그것을 근거로 "이 공고는 750일 전에 있었다"고
+  // 말하면 거짓이 된다. 성공(2xx) 또는 리다이렉트(3xx — 공고 URL 이동)만
+  // 존재의 증거로 인정한다.
+  //
+  // audit-archive-evidence.ts로 기존 데이터 40건(나이 상위 = 가장 위험한 구간)을
+  // 검증한 결과 100% 건전했지만, 표본이 깨끗한 것과 코드가 안전한 것은 다르다.
   const api =
     `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(normalized)}` +
-    `&output=json&matchType=exact&fl=timestamp&limit=500`;
+    `&output=json&matchType=exact&fl=timestamp,statuscode&limit=500`;
 
   try {
     const rows = await fetchJson<string[][]>(api, {
@@ -78,6 +87,11 @@ async function probeUrl(jobUrl: string): Promise<CdxProbe | null> {
     });
     const stamps = rows
       .slice(1) // 헤더 제거
+      .filter((r) => {
+        const status = r[1] ?? '';
+        // 상태코드가 비어 있는 레코드도 존재한다. 보수적으로 제외한다.
+        return status.startsWith('2') || status.startsWith('3');
+      })
       .map((r) => r[0])
       .filter((s): s is string => typeof s === 'string')
       .sort();
