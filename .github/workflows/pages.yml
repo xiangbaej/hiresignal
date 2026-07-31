@@ -50,8 +50,19 @@ jobs:
       - name: 리포지토리 체크아웃
         uses: actions/checkout@v4
 
-      - name: Pages 설정
+      # enablement: true 가 핵심이다.
+      #
+      # 실측: GET /repos/xiangbaej/hiresignal/pages 가 404를 반환했다. 공개
+      # 저장소에서 이 응답은 "Pages가 아예 활성화되지 않았다"는 뜻이다. 설정
+      # 화면을 사람이 눌러야 하는 상태였다.
+      #
+      # 이 옵션은 pages:write 권한으로 Pages를 직접 활성화하고 소스를 workflow로
+      # 지정한다. 즉 사람이 설정을 만지지 않아도 배포가 시작된다. 검증 장치가
+      # 사람의 클릭 한 번에 막혀 있는 상태를 없애는 것이 목적이다.
+      - name: Pages 설정 (필요 시 활성화)
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: 산출물 업로드
         uses: actions/upload-pages-artifact@v3
